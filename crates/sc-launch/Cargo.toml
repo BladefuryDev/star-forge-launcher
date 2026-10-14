@@ -1,0 +1,18 @@
+[package]
+name = "sc-launch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "sc_launch"
+
+[[bin]]
+name = "sc-launch"
+path = "src/main.rs"
+
+[dependencies]
+sc-profile.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true

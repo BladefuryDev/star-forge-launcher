@@ -1,0 +1,11 @@
+[package]
+name = "sc-inject"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+sc-profile.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true

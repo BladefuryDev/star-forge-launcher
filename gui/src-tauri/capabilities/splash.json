@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "splash",
+  "description": "No plugin permissions; native dispatch allows only splash_finished.",
+  "windows": ["splash"],
+  "permissions": []
+}

@@ -1,0 +1,30 @@
+[workspace]
+resolver = "2"
+members = ["crates/sc-profile", "crates/sc-inject", "crates/sc-agent", "crates/sc-launch", "gui/src-tauri"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+sc-profile = { path = "crates/sc-profile" }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+minhook = "0.9"
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Globalization",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_Registry",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+] }
+
+[profile.release]
+opt-level = 2
+debug = 1

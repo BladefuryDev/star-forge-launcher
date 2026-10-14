@@ -1,0 +1,16 @@
+[package]
+name = "sc-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "sc_agent"
+crate-type = ["cdylib"]
+
+[dependencies]
+sc-profile.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
+minhook.workspace = true
