@@ -1,0 +1,9 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "resources": {
+      "../../dist/tools/sc-inject.exe": "tools/sc-inject.exe",
+      "../../dist/tools/sc_agent.dll": "tools/sc_agent.dll"
+    }
+  }
+}
