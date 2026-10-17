@@ -182,6 +182,7 @@ pub fn command(setup: &Setup, profile_dir: &Path, game_args: &[String]) -> Resul
         c
     };
 
+    crate::env::use_host_env(&mut cmd);
     cmd.current_dir(setup.game_dir.join("win64"));
     Ok(cmd)
 }

@@ -8,6 +8,7 @@ mod profiles;
 
 use std::path::Path;
 use tauri::{Emitter, Manager};
+#[cfg(not(target_os = "linux"))]
 use tauri_plugin_opener::OpenerExt;
 
 /// Sent to the interface as a number: 0 info, 1 success, 2 error.
@@ -24,6 +25,22 @@ pub fn notify(app: &tauri::AppHandle, message: String, level: NotificationLevel)
 }
 
 pub fn open_path(app: &tauri::AppHandle, path: &Path) -> Result<(), String> {
+    // On Linux, start xdg-open ourselves so it gets the host environment, not
+    // the AppImage's (see sc_launch::env::use_host_env).
+    #[cfg(target_os = "linux")]
+    {
+        let _ = app;
+        let mut cmd = std::process::Command::new("xdg-open");
+        cmd.arg(path)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        sc_launch::env::use_host_env(&mut cmd);
+        let mut child = cmd.spawn().map_err(|e| format!("could not open {}: {e}", path.display()))?;
+        std::thread::spawn(move || child.wait());
+        Ok(())
+    }
+    #[cfg(not(target_os = "linux"))]
     app.opener()
         .open_path(path.to_string_lossy(), None::<&str>)
         .map_err(|e| format!("could not open {}: {e}", path.display()))
