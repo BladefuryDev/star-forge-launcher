@@ -4,9 +4,9 @@ export function mountLayout() {
   required('launcher').innerHTML = `
     <dialog id="startup-dialog" aria-labelledby="startup-title"><h2 id="startup-title">Launcher could not finish starting</h2><p id="startup-error"></p><div class="setting-buttons"><button id="retry-startup" class="button">Retry startup</button><button id="exit-startup" class="button">Exit launcher</button></div></dialog>
     <nav class="rail" aria-label="Launcher navigation">
-      <button class="brand-button" data-page="home" aria-label="STAR FORGE Launcher home"><img src="assets/starfury-emblem.png" alt="" /></button>
+      <button class="brand-button" data-page="home" aria-label="STAR FORGE Launcher home"><img src="assets/starforge-emblem.png" alt="" /></button>
       <button class="rail-button" data-page="home" aria-current="page"><span data-icon="home"></span><span>Home</span></button>
-      <button class="rail-button" data-page="overview" aria-label="Star Conflict"><img class="game-emblem" src="assets/starfury-emblem.png" alt="" /><span>Star Conflict</span></button>
+      <button class="rail-button" data-page="overview" aria-label="Star Conflict"><img class="game-emblem" src="assets/starforge-emblem.png" alt="" /><span>Star Conflict</span></button>
       <span class="rail-spacer"></span>
       <button id="open-settings" class="rail-button"><span data-icon="settings"></span><span>Settings</span></button>
     </nav>
@@ -18,12 +18,12 @@ export function mountLayout() {
         <button data-window="toggleMaximize" aria-label="Maximize or restore"><span data-icon="square"></span></button>
         <button data-window="close" aria-label="Close"><span data-icon="close"></span></button>
       </div>
-      <img id="game-wordmark" class="game-wordmark" src="assets/starfury-logo.png" alt="STARFURY, unofficial Star Conflict server" />
+      <img id="game-wordmark" class="game-wordmark" src="assets/starforge-logo.png" alt="STAR FORGE" />
       <div class="content-area">
         <section id="home-page" class="home-page">
           <h1>Home</h1><div class="section-heading"><h2>Your games</h2><span>1 game</span></div>
           <button class="game-card" data-page="overview" aria-label="Open Star Conflict">
-            <span class="game-card-art"></span><span class="game-card-info"><img class="game-emblem" src="assets/starfury-emblem.png" alt="" /><span><strong>Star Conflict</strong><small>Open game</small></span><span data-icon="arrow"></span></span>
+            <span class="game-card-art"></span><span class="game-card-info"><img class="game-emblem" src="assets/starforge-emblem.png" alt="" /><span><strong>Star Conflict</strong><small>Open game</small></span><span data-icon="arrow"></span></span>
           </button>
         </section>
         <section id="overview-page" class="overview-page" hidden>

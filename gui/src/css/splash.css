@@ -13,25 +13,18 @@ body {
 #sting {
   display: flex;
   align-items: center;
-  gap: 22px;
+  justify-content: center;
   width: 400px;
   max-width: calc(100% - 48px);
   filter: drop-shadow(0 2px 4px #0005);
 }
-#sting-emblem {
-  width: 72px;
-  height: 72px;
-  object-fit: contain;
-  flex: none;
-  opacity: 0;
-}
 #sting-wordmark {
   display: block;
   min-width: 0;
-  width: 300px;
+  width: 360px;
   height: auto;
   object-fit: contain;
-  opacity: 0;
+  opacity: 1;
 }
 #sting[hidden] {
   display: none;

@@ -9,7 +9,7 @@ function image(value) {
   return value;
 }
 
-/** Uses Star Conflict's banner from the local Steam library cache; the STARFURY logo stays as the wordmark. */
+/** Uses Star Conflict's banner from the local Steam library cache; the STAR FORGE logo stays as the wordmark. */
 export async function bindArtwork() {
   const art = object(await invoke('get_artwork'));
   const hero = image(art.hero);

@@ -11,8 +11,7 @@ unofficial Star Conflict server), but it is meant for anyone running or playing
 on a Star Conflict server project.
 
 > **Status:** early development (0.1). It works for day-to-day play on Linux
-> (Proton) and Windows, but expect rough edges. The current logo and colours
-> are placeholder STARFURY branding.
+> (Proton) and Windows, but expect rough edges.
 
 ## Features
 
@@ -24,7 +23,7 @@ on a Star Conflict server project.
   (each one checks the original bytes first and is skipped if they differ).
 - **Linux and Windows** – on Linux the game runs through the same Proton build
   and prefix Steam uses, so your settings carry over; the Steam overlay works.
-- **Desktop launcher** with themes (STARFURY, Empire, Federation, Jericho),
+- **Desktop launcher** with themes (STAR FORGE, STARFURY, Empire, Federation, Jericho),
   tray support and a command-line tool (`sc-launch`) for scripting.
 
 ## Installing
@@ -168,7 +167,7 @@ packages and attaches them to a draft release for review before publishing.
 - [ ] Profile editor for patches and extra arguments in the UI
 
 **Launcher**
-- [ ] STAR FORGE's own logo and default theme (replacing the STARFURY placeholder)
+- [x] STAR FORGE's own logo, icon and default theme (v1)
 - [ ] Server status on the play screen (online / player count)
 - [ ] Launcher self-update via GitHub releases
 - [ ] Settings for the theme label ("Faction colour") now that themes go beyond factions

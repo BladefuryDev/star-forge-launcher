@@ -1,53 +1,22 @@
 import { invoke } from './bridge.js';
 
+// The splash is a still image on a transparent window. It is deliberately not
+// animated: on Linux, WebKitGTK's fallback renderer (used where DMA-BUF is
+// disabled, e.g. NVIDIA on Wayland) does not clear transparent pixels between
+// frames, so anything that moves leaves a trail.
+const SHOW_MS = 1800;
+
 let finished = false;
 const finish = () => {
   if (finished) return;
   finished = true;
   invoke('splash_finished').catch((error) => console.error('Splash completion failed', error));
 };
-const sting = document.getElementById('sting');
-const emblem = document.getElementById('sting-emblem');
 const wordmark = document.getElementById('sting-wordmark');
-if (
-  matchMedia('(prefers-reduced-motion: reduce)').matches ||
-  !sting ||
-  !(emblem instanceof HTMLImageElement) ||
-  !(wordmark instanceof HTMLImageElement)
-) {
+if (!(wordmark instanceof HTMLImageElement)) {
   finish();
 } else {
-  for (const image of [emblem, wordmark]) {
-    image.addEventListener('error', finish, { once: true });
-    if (image.complete && image.naturalWidth === 0) finish();
-  }
-  if (!finished) {
-    const centerOffset =
-      (sting.getBoundingClientRect().width - emblem.getBoundingClientRect().width) / 2;
-    emblem.animate(
-      [
-        { opacity: 0, transform: `translateX(${centerOffset}px) scale(.12)`, offset: 0 },
-        { opacity: 1, transform: `translateX(${centerOffset}px) scale(.12)`, offset: 0.1 },
-        { opacity: 1, transform: `translateX(${centerOffset}px) scale(1)`, offset: 0.48 },
-        { opacity: 1, transform: 'translateX(0) scale(1)', offset: 1 },
-      ],
-      { duration: 1000, easing: 'cubic-bezier(.2,.7,.25,1)', fill: 'forwards' },
-    );
-    wordmark.animate(
-      [
-        { opacity: 0, clipPath: 'inset(0 100% 0 0)', transform: 'translateX(-10px)' },
-        { opacity: 1, clipPath: 'inset(0 0 0 0)', transform: 'translateX(0)' },
-      ],
-      { delay: 720, duration: 450, easing: 'ease-out', fill: 'forwards' },
-    );
-    const fade = sting.animate([{ opacity: 1 }, { opacity: 0 }], {
-      delay: 1950,
-      duration: 350,
-      easing: 'ease-in-out',
-      fill: 'forwards',
-    });
-    // Only the complete brand's fade releases the launcher, not either child animation.
-    fade.addEventListener('finish', finish, { once: true });
-    setTimeout(finish, 3000);
-  }
+  wordmark.addEventListener('error', finish, { once: true });
+  if (wordmark.complete && wordmark.naturalWidth === 0) finish();
+  setTimeout(finish, SHOW_MS);
 }

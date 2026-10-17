@@ -4,8 +4,10 @@ export function control(id, kind) {
   if (!(element instanceof kind)) throw new Error(`Missing ${id} control`);
   return element;
 }
-/** Displayed text always spells the server brand in capitals (STARFURY, STARFURY.XYZ); stored values stay as typed. @param {string} text */
-export const brand = (text) => text.replace(/star\s?fury/gi, 'STARFURY');
+/** Displayed text always spells brand names in capitals (STAR FORGE, STARFURY, STARFURY.XYZ); stored values stay as typed. @param {string} text */
+export const brand = (text) => text
+    .replace(/star\s?forge/gi, 'STAR FORGE')
+    .replace(/star\s?fury(\.xyz)?/gi, (name) => name.replace(/\s/, '').toUpperCase());
 /** @param {string} id */
 export const required = (id) => control(id, HTMLElement);
 

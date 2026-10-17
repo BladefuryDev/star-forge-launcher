@@ -2,16 +2,20 @@
   color-scheme: dark;
   font-family: Inter, 'Segoe UI', sans-serif;
   font-size: 14px;
-  color: #efe9eb;
-  background: #0c0a0d;
+  color: #ece8e3;
+  background: #0d0c0b;
+  --accent: #e39a29;
+  --ink: #1a1206;
+  --panel: #1a1816;
+  --line: #3a3530;
+  --muted: #a9a39c;
+  --silver: #e8e4e0;
+  --success: #80ce9d;
+  --art-fallback: radial-gradient(ellipse at 70% 30%, #4a3418, #0d0c0b 70%);
+}
+:root[data-faction='starfury'] {
   --accent: #f12d62;
   --ink: #1f0610;
-  --panel: #1b1418;
-  --line: #3d3238;
-  --muted: #a89da1;
-  --silver: #e0d9db;
-  --success: #80ce9d;
-  --art-fallback: radial-gradient(ellipse at 70% 30%, #4a1a2c, #0c0a0d 70%);
 }
 :root[data-faction='empire'] {
   --accent: #e0a35c;
@@ -74,7 +78,7 @@ small,
 input,
 select {
   color: inherit;
-  background: #261d22;
+  background: #26231f;
   border: 1px solid var(--line);
   border-radius: 7px;
   padding: 9px 12px;
@@ -114,7 +118,7 @@ select:focus-visible {
   flex-direction: column;
   gap: 9px;
   padding: 25px 8px 18px;
-  background: #120d10e8;
+  background: #11100ee8;
   border-right: 1px solid #ffffff10;
   z-index: 4;
 }
@@ -176,14 +180,14 @@ select:focus-visible {
   z-index: -1;
   pointer-events: none;
   background:
-    linear-gradient(90deg, #0b080ab8, #0b080a18 75%),
-    linear-gradient(0deg, #0c0a0d 3%, #0c0a0d38 52%, #0b080a38);
+    linear-gradient(90deg, #0b0a09b8, #0b0a0918 75%),
+    linear-gradient(0deg, #0d0c0b 3%, #0d0c0b38 52%, #0b0a0938);
 }
 #launcher[data-page='home'] .artwork {
   filter: blur(5px);
 }
 #launcher[data-page='home'] .main-surface:after {
-  background: #140b10bc;
+  background: #12100dbc;
 }
 .drag-area {
   position: absolute;
@@ -255,7 +259,7 @@ select:focus-visible {
   margin-top: 34px;
 }
 .section-heading h2 {
-  color: #ece5e8;
+  color: #ece8e3;
 }
 .game-card {
   display: block;
@@ -265,7 +269,7 @@ select:focus-visible {
   overflow: hidden;
   padding: 0;
   text-align: left;
-  background: #1c1418e6;
+  background: #1c1916e6;
   transition:
     border-color 0.2s,
     transform 0.2s;
@@ -364,7 +368,7 @@ select:focus-visible {
   padding: 3px;
 }
 .server-row option {
-  background: #1b1418;
+  background: #1a1816;
 }
 .text-button {
   font-size: 12px;
@@ -414,8 +418,8 @@ progress::-webkit-progress-value {
   gap: 10px;
   max-width: 570px;
   padding: 12px 15px;
-  background: #21181cf5;
-  border: 1px solid #5e4c54;
+  background: #211e1af5;
+  border: 1px solid #5c544b;
   border-radius: 10px;
   box-shadow: 0 7px 25px #0005;
   font-size: 12px;
@@ -435,9 +439,9 @@ progress::-webkit-progress-value {
   color: var(--muted);
 }
 dialog {
-  color: #efe9eb;
-  background: #1b1418;
-  border: 1px solid #463a40;
+  color: #ece8e3;
+  background: #1a1816;
+  border: 1px solid #454039;
   border-radius: 19px;
   box-shadow: 0 20px 100px #0009;
   max-height: 85vh;
@@ -445,7 +449,7 @@ dialog {
   width: min(720px, 90vw);
 }
 dialog::backdrop {
-  background: #0a0508ad;
+  background: #080706ad;
   backdrop-filter: blur(7px);
 }
 dialog header {
@@ -541,8 +545,8 @@ dialog footer {
   font-weight: 600;
 }
 .button {
-  background: #2e2429;
-  border: 1px solid #54454c;
+  background: #2d2925;
+  border: 1px solid #534c44;
   border-radius: 8px;
   padding: 10px 16px;
   font-size: 12px;

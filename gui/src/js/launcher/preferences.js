@@ -1,7 +1,7 @@
 import { invoke } from './bridge.js';
 import { object, choice, string } from './contracts.js';
 
-export const factions = /** @type {const} */ (['starfury', 'empire', 'federation', 'jericho']);
+export const factions = /** @type {const} */ (['starforge', 'starfury', 'empire', 'federation', 'jericho']);
 
 /** @param {unknown} input */
 export function parsePreferences(input) {

@@ -26,6 +26,7 @@ pub enum CloseBehavior {
 #[serde(rename_all = "camelCase")]
 pub enum Faction {
     #[default]
+    Starforge,
     Starfury,
     Empire,
     Federation,
