@@ -81,9 +81,13 @@ fn phase(app: &AppHandle) -> Phase {
     app.state::<GameState>().0.lock().unwrap().phase.unwrap_or(Phase::Checking)
 }
 
-/// Where sc-inject.exe and sc_agent.dll are: bundled resources, next to this
-/// program, or (for development builds) the repo's dist folder.
+/// Where sc-inject.exe and sc_agent.dll are: `STAR_FORGE_TOOLS_DIR`, bundled
+/// resources, next to this program, or (development builds only) the repo's
+/// dist folder.
 fn tools_dir(app: &AppHandle) -> Option<PathBuf> {
+    if let Some(dir) = sc_launch::env::path(sc_launch::env::TOOLS_DIR) {
+        return Some(dir);
+    }
     let has_tools = |d: &Path| d.join(launch::INJECT_EXE).is_file() && d.join(launch::AGENT_DLL).is_file();
     let mut candidates = Vec::new();
     if let Ok(dir) = app.path().resource_dir() {
@@ -91,10 +95,14 @@ fn tools_dir(app: &AppHandle) -> Option<PathBuf> {
     }
     if let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
         candidates.push(dir.clone());
-        // target/<profile>/ -> <repo>/dist/<platform>/
-        let platform = if cfg!(windows) { "windows" } else { "linux" };
-        if let Some(repo) = dir.ancestors().find(|a| a.join("dist").join(platform).is_dir()) {
-            candidates.push(repo.join("dist").join(platform));
+        // target/<profile>/ -> <repo>/dist/<platform>/. Never in release builds:
+        // the search climbs to the drive root, and a folder planted there (any
+        // user can create C:\dist on Windows) would get its DLL into the game.
+        if cfg!(debug_assertions) {
+            let platform = if cfg!(windows) { "windows" } else { "linux" };
+            if let Some(repo) = dir.ancestors().find(|a| a.join("dist").join(platform).is_dir()) {
+                candidates.push(repo.join("dist").join(platform));
+            }
         }
     }
     candidates.into_iter().find(|d| has_tools(d))
