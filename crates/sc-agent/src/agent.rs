@@ -1,4 +1,4 @@
-use sc_profile::{normalize, Profile, AGENT_LOG, PROFILE_ENV, PROFILE_FILE};
+use sc_profile::{normalize, Profile, AGENT_LOG, PROFILE_ENV};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
@@ -63,10 +63,7 @@ pub fn init() {
     log(&format!("game root: {game_root}"));
     log(&format!("profile:   {profile_dir}"));
 
-    let profile = match std::fs::read_to_string(format!("{profile_dir}\\{PROFILE_FILE}"))
-        .map_err(|e| e.to_string())
-        .and_then(|t| Profile::from_toml(&t).map_err(|e| e.to_string()))
-    {
+    let profile = match Profile::load(std::path::Path::new(&profile_dir)) {
         Ok(p) => p,
         Err(e) => {
             log(&format!("profile error, agent disabled: {e}"));

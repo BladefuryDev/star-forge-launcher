@@ -765,3 +765,123 @@ dialog footer {
   font-size: 12px;
   margin: 0;
 }
+.summary-description {
+  color: var(--muted);
+  line-height: 1.55;
+  margin: -10px 0 22px;
+  overflow-wrap: anywhere;
+}
+.update-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: #2a1f12;
+  font-size: 13px;
+}
+.summary-links {
+  margin-bottom: 10px;
+}
+.pack-import {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+.pack-import h2 {
+  font-size: 15px;
+  margin: 0;
+}
+.pack-import p,
+.field-note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+}
+.pack-import-row {
+  display: flex;
+  gap: 8px;
+}
+.pack-import-row input {
+  flex: 1;
+  min-width: 0;
+}
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 6px;
+}
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--line);
+}
+.pack-dialog {
+  width: min(600px, 92vw);
+}
+.pack-body {
+  display: grid;
+  gap: 16px;
+  margin: 8px 0 22px;
+  overflow-wrap: anywhere;
+}
+.pack-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 22px;
+}
+.pack-version {
+  color: var(--muted);
+  font-size: 13px;
+}
+.pack-description {
+  color: var(--muted);
+  line-height: 1.55;
+  margin: 0;
+}
+.pack-body .profile-facts {
+  margin: 0;
+}
+.pack-files summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 12px;
+}
+.pack-files ul {
+  max-height: 160px;
+  overflow: auto;
+  margin: 8px 0 0;
+  padding: 10px 12px 10px 28px;
+  background: #121110;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: 11px/1.6 ui-monospace, monospace;
+}
+.pack-files .muted {
+  color: var(--muted);
+  list-style: none;
+}
+.pack-warnings {
+  margin: 0;
+  padding: 10px 12px 10px 28px;
+  border: 1px solid #6b4a1e;
+  border-radius: 8px;
+  background: #241a0e;
+  color: #f0c890;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.pack-trust {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 0;
+}

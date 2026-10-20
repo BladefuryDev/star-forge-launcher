@@ -28,7 +28,10 @@ export function mountLayout() {
         </section>
         <section id="overview-page" class="overview-page" hidden>
           <div class="profile-summary"><span class="eyebrow">Server profile</span><h1 id="summary-name">No profile selected</h1>
-            <dl class="profile-facts"><dt>Server</dt><dd id="summary-server">–</dd><dt>Starts</dt><dd id="summary-mode">–</dd><dt>Game patches</dt><dd id="summary-patches">–</dd></dl>
+            <p id="summary-description" class="summary-description" hidden></p>
+            <dl class="profile-facts"><dt>Server</dt><dd id="summary-server">–</dd><dt>Starts</dt><dd id="summary-mode">–</dd><dt>Game patches</dt><dd id="summary-patches">–</dd><dt>Pack version</dt><dd id="summary-version">–</dd></dl>
+            <div id="summary-update-row" class="update-row" hidden><span id="summary-update-text"></span><button class="button primary" id="summary-update">Review update</button></div>
+            <div id="summary-links" class="setting-buttons summary-links" hidden></div>
             <div class="setting-buttons"><button class="button" id="summary-edit">Edit profile</button><button class="button" id="summary-folder">Open profile folder</button></div>
           </div>
         </section>
@@ -42,13 +45,23 @@ export function mountLayout() {
   const dialogs = document.createElement('div');
   dialogs.innerHTML = `<dialog id="settings-dialog" class="settings-dialog"><header><h1>Settings</h1><button class="icon-button" data-close-dialog aria-label="Close settings"><span data-icon="close"></span></button></header><nav class="settings-tabs" aria-label="Settings"><button data-settings-tab="launcher" aria-current="page">Launcher</button><button data-settings-tab="game">Star Conflict</button></nav><div id="settings-content"></div><footer id="launcher-version"></footer></dialog>
     <dialog id="profile-dialog" class="profile-dialog" aria-labelledby="profile-dialog-title"><header><h1 id="profile-dialog-title">Add server profile</h1><button class="icon-button" data-close-dialog aria-label="Close"><span data-icon="close"></span></button></header>
+      <section id="pack-import" class="pack-import" aria-labelledby="pack-import-title">
+        <h2 id="pack-import-title">Import a server pack</h2>
+        <p>Got a pack link or zip from a server? It brings the server address, files and look in one go.</p>
+        <div class="pack-import-row"><input id="pack-link" type="text" placeholder="https://… or starforge://…" spellcheck="false" autocomplete="off" aria-label="Pack link" /><button type="button" class="button" id="pack-link-import">Import</button><button type="button" class="button" id="pack-file-import">Choose zip…</button></div>
+        <div class="divider"><span>or set one up yourself</span></div>
+      </section>
       <form id="profile-form" method="dialog">
+        <p id="profile-managed-note" class="field-note" hidden>This profile comes from a server pack. Changes you make here are kept when the pack updates.</p>
         <label class="field">Name<input id="profile-name" type="text" maxlength="64" required placeholder="STARFURY community server" /></label>
         <label class="field">Server address<input id="profile-server" type="text" maxlength="255" placeholder="STARFURY.XYZ:3801" spellcheck="false" autocomplete="off" /><small>Filled in on the login screen. Leave empty to keep the game's own setting.</small></label>
         <label class="check-field"><input id="profile-local-server" type="checkbox" /><span>Start the local server with the game<small>Runs the bundled MongoDB and Hub, as Steam's default launch does. Leave off for profiles that play on someone else's server.</small></span></label>
         <p id="profile-error" class="form-error" hidden></p>
         <div class="dialog-actions"><button type="button" class="button danger" id="delete-profile" hidden>Delete</button><button type="button" class="button" id="profile-folder" hidden>Open folder</button><span class="spacer"></span><button type="button" class="button" data-close-dialog>Cancel</button><button type="submit" class="button primary" id="save-profile">Save</button></div>
       </form></dialog>
+    <dialog id="pack-dialog" class="pack-dialog" aria-labelledby="pack-title"><header><h1 id="pack-title">Install server pack</h1><button class="icon-button" data-close-dialog aria-label="Close"><span data-icon="close"></span></button></header>
+      <div id="pack-body" class="pack-body"></div>
+      <div class="dialog-actions"><span class="spacer"></span><button class="button" data-close-dialog>Cancel</button><button class="button primary" id="pack-install">Install</button></div></dialog>
     <dialog id="confirm-dialog" aria-labelledby="confirm-title"><h2 id="confirm-title">Delete profile?</h2><p id="confirm-text"></p><div class="dialog-actions"><span class="spacer"></span><button class="button" data-close-dialog>Cancel</button><button class="button danger" id="confirm-delete">Delete</button></div></dialog>`;
   document.body.append(dialogs);
   renderIcons();

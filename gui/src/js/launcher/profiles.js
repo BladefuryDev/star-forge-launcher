@@ -12,6 +12,14 @@ function parseProfile(item) {
     localServer: boolean(value.localServer),
     patches: number(value.patches, 0, 100000),
     error: value.error === null ? null : string(value.error),
+    packId: value.packId === null ? null : string(value.packId),
+    version: value.version === null ? null : string(value.version),
+    description: string(value.description),
+    managed: boolean(value.managed),
+    links: array(value.links, (link) => {
+      const item = object(link);
+      return { key: string(item.key), label: string(item.label) };
+    }),
   };
 }
 /** @typedef {ReturnType<typeof parseProfile>} ProfileInfo */
@@ -37,6 +45,10 @@ export function bindProfiles(preferences, onChange) {
   let editing = null;
   /** Whether the local-server box was set by hand in the open dialog. */
   let localTouched = false;
+  /** Newer pack versions by profile id. @type {Map<string, { version: string, url: string }>} */
+  let updates = new Map();
+  /** @type {(url: string) => void} */
+  let onReviewUpdate = () => {};
 
   const current = () => profiles.find((p) => p.id === select.value) || null;
 
@@ -54,6 +66,30 @@ export function bindProfiles(preferences, onChange) {
         : 'Game only'
       : '–';
     required('summary-patches').textContent = profile ? String(profile.patches) : '–';
+    required('summary-version').textContent = profile?.version
+      ? `${profile.version}${profile.managed ? '' : ' (your own)'}`
+      : '–';
+    const description = required('summary-description');
+    description.textContent = brand(profile?.description || '');
+    description.hidden = !profile?.description;
+    const links = required('summary-links');
+    links.replaceChildren(
+      ...(profile?.links || []).map((link) => {
+        const button = document.createElement('button');
+        button.className = 'button';
+        button.textContent = link.label;
+        button.addEventListener('click', () =>
+          run(() => invoke('open_pack_link', { id: profile?.id, key: link.key })),
+        );
+        return button;
+      }),
+    );
+    links.hidden = !profile?.links.length;
+    const update = profile ? updates.get(profile.id) : undefined;
+    required('summary-update-row').hidden = !update;
+    required('summary-update-text').textContent = update
+      ? `Version ${update.version} of this pack is available.`
+      : '';
     control('summary-edit', HTMLButtonElement).disabled = !profile;
     control('summary-folder', HTMLButtonElement).disabled = !profile;
     edit.disabled = !profile;
@@ -101,6 +137,9 @@ export function bindProfiles(preferences, onChange) {
     serverInput.value = brand(profile?.server || '');
     localInput.checked = profile ? profile.localServer : false;
     formError.hidden = true;
+    required('pack-import').hidden = Boolean(profile);
+    required('profile-managed-note').hidden = !profile?.managed;
+    control('pack-link', HTMLInputElement).value = '';
     required('delete-profile').hidden = !profile;
     required('profile-folder').hidden = !profile;
     dialog.showModal();
@@ -121,6 +160,10 @@ export function bindProfiles(preferences, onChange) {
     });
   });
   required('add-profile').addEventListener('click', () => open(null));
+  required('summary-update').addEventListener('click', () => {
+    const update = updates.get(current()?.id || '');
+    if (update) onReviewUpdate(update.url);
+  });
   edit.addEventListener('click', () => open(current()));
   required('summary-edit').addEventListener('click', () => open(current()));
   required('summary-folder').addEventListener('click', () => {
@@ -185,5 +228,13 @@ export function bindProfiles(preferences, onChange) {
     refresh,
     ready: () => loaded && Boolean(current()) && !current()?.error,
     current,
+    /** @param {Map<string, { version: string, url: string }>} found */
+    setUpdates: (found) => {
+      updates = found;
+      summarize();
+    },
+    /** @param {(url: string) => void} handler */
+    onReviewUpdate: (handler) => (onReviewUpdate = handler),
+    closeDialog: () => dialog.close(),
   };
 }

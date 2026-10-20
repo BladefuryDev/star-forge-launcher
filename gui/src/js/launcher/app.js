@@ -5,6 +5,7 @@ import { loadPreferences } from './preferences.js';
 import { bindShell } from './shell.js';
 import { bindSettings } from './settings.js';
 import { bindProfiles } from './profiles.js';
+import { bindPacks } from './packs.js';
 import { bindArtwork } from './artwork.js';
 import { startupStep, showStartupFailure } from './startup.js';
 import { control, required, notice, run } from './ui.js';
@@ -79,6 +80,12 @@ async function start() {
     await startupStep(profiles.refresh(), 'Loading server profiles');
     await startupStep(invoke('main_ready'), 'Showing launcher');
     run(() => bindSettings(preferences, store));
+    run(() =>
+      bindPacks(profiles, () => {
+        const phase = store.getSnapshot()?.phase;
+        return phase === 'launching' || phase === 'running';
+      }),
+    );
     run(bindArtwork);
     run(() => invoke('initialize_launcher'));
   } catch (error) {

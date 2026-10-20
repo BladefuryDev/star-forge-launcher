@@ -15,6 +15,10 @@ on a Star Conflict server project.
 
 ## Features
 
+- **Server packs** – a server hands out one zip or link with its address,
+  game files and look; the launcher shows what it changes before installing,
+  verifies downloads and offers updates. One-click installs through
+  `starforge://` links.
 - **Server profiles** – name, master server address (`host:port`), optional
   local server, extra game arguments.
 - **File overlays** – put files in a profile's `files/` folder and the game
@@ -59,36 +63,31 @@ One limitation comes from the game itself: a file packed inside a `.pak`
 archive always wins over a loose file with the same path, so an overlay can
 replace a whole `.pak` but not a single file inside one.
 
-## Server profiles
+## Server profiles and packs
 
-Profiles live in the launcher's data folder:
+Every profile is a *server pack*: the same format whether a server operator
+published it or you made it yourself in the launcher. Profiles live in the
+launcher's data folder:
 
 | Platform | Folder |
 |---|---|
 | Linux | `~/.local/share/star-forge/profiles/` |
 | Windows | `%APPDATA%\star-forge\profiles\` |
 
-Each profile is a folder with a `profile.toml` and an optional `files/` folder.
-The launcher creates and edits the basic settings for you; patches and extra
-options are added by hand:
-
-```toml
-name = "My community server"
-server = "play.example.org:3801"   # written to data/address.cfg for the login screen
-local_server = false               # true = also start the bundled MongoDB + Hub
-args = []                          # extra game.exe arguments
-trace_files = false                # log every file the game opens to agent.log
-
-[[patch]]
-description = "skip a version check"
-module = "game.exe"                # optional, defaults to the game executable
-offset = "0x1A2B3C"                # offset from the module base
-original = "74 05"                 # bytes that must be there
-patched = "EB 05"                  # bytes to write (same length)
+```
+profiles/my-server/
+├── pack.json     the pack: name, server, branding, patches (replaced by updates)
+├── resources/    the pack's artwork
+├── files/        replacement game files, mirroring the game folder
+├── local.json    your own changes on top of the pack (never touched by updates)
+└── agent.log     what the agent redirected and patched last launch
 ```
 
-The agent writes `agent.log` inside the profile folder, which shows each file
-redirect and patch result.
+To make a pack for your server, start from
+[`templates/pack`](templates/pack/README.md); the format is documented in
+[`schemas/pack.schema.json`](schemas/pack.schema.json), which editors use for
+autocomplete. Profiles from before 0.2 (`profile.toml`) are converted
+automatically.
 
 ## Building from source
 
@@ -137,6 +136,9 @@ variables, then auto-detection.
 sc-launch list                       # list profiles
 sc-launch info                       # show the detected game, tools and Proton
 sc-launch run <profile> [-- args]    # start the game with a profile
+sc-launch install <zip|folder|url>   # install or update a server pack
+sc-launch updates                    # check installed packs for new versions
+sc-launch update <profile>           # install the newest version of a profile's pack
 ```
 
 ### Repository layout
@@ -159,12 +161,17 @@ packages and attaches them to a draft release for review before publishing.
 ## Goals and to-do
 
 **Profiles for everyone**
-- [ ] Profile packs: import a profile from a zip or URL (name, server, files,
-      patches) so a server project can hand players one file or link
-- [ ] Per-profile branding: logo, background and accent colour supplied by the
-      profile, so each community gets its own look inside the launcher
-- [ ] Update packs from their source and show what changed
+- [x] Server packs: import from a zip, folder, link or `starforge://` link,
+      with a review of what the pack changes before it's installed
+- [x] Pack updates from the server's published `pack.json`, checksum-verified,
+      keeping the player's own changes
+- [x] Warn when a pack was made for a different game build
+- [ ] Per-profile branding: show the pack's logo, background and accent colour
+      (the format already carries them)
+- [ ] Settle how client patches are applied (currently experimental)
+- [ ] Export a profile as a pack zip from the launcher
 - [ ] Profile editor for patches and extra arguments in the UI
+- [ ] Pack signing, so players can tell a pack really comes from its server
 
 **Launcher**
 - [x] STAR FORGE's own logo, icon and default theme (v1)

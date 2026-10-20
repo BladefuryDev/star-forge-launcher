@@ -6,7 +6,7 @@ mod lifecycle;
 mod prefs;
 mod profiles;
 
-use std::path::Path;
+use std::ffi::OsStr;
 use tauri::{Emitter, Manager};
 #[cfg(not(target_os = "linux"))]
 use tauri_plugin_opener::OpenerExt;
@@ -24,7 +24,8 @@ pub fn notify(app: &tauri::AppHandle, message: String, level: NotificationLevel)
     }
 }
 
-pub fn open_path(app: &tauri::AppHandle, path: &Path) -> Result<(), String> {
+/// Opens a folder, file or web link with the desktop's default program.
+pub fn open_path(app: &tauri::AppHandle, path: &OsStr) -> Result<(), String> {
     // On Linux, start xdg-open ourselves so it gets the host environment, not
     // the AppImage's (see sc_launch::env::use_host_env).
     #[cfg(target_os = "linux")]
@@ -36,19 +37,51 @@ pub fn open_path(app: &tauri::AppHandle, path: &Path) -> Result<(), String> {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null());
         sc_launch::env::use_host_env(&mut cmd);
-        let mut child = cmd.spawn().map_err(|e| format!("could not open {}: {e}", path.display()))?;
+        let mut child = cmd.spawn().map_err(|e| format!("could not open {}: {e}", path.to_string_lossy()))?;
         std::thread::spawn(move || child.wait());
         Ok(())
     }
     #[cfg(not(target_os = "linux"))]
     app.opener()
         .open_path(path.to_string_lossy(), None::<&str>)
-        .map_err(|e| format!("could not open {}: {e}", path.display()))
+        .map_err(|e| format!("could not open {}: {e}", path.to_string_lossy()))
 }
 
 #[tauri::command]
 fn app_version(app: tauri::AppHandle) -> String {
     app.package_info().version.to_string()
+}
+
+/// `starforge://install?url=...` links, from the command line, the desktop, or
+/// a second launcher instance (which hands its link over and exits).
+fn setup_pack_links(app: &tauri::AppHandle) {
+    use tauri_plugin_deep_link::DeepLinkExt;
+    sc_launch::packs::clear_staging();
+    let handle = app.clone();
+    app.deep_link().on_open_url(move |event| {
+        for url in event.urls() {
+            profiles::receive_link(&handle, url.to_string());
+        }
+    });
+    if let Ok(Some(urls)) = app.deep_link().get_current() {
+        for url in urls {
+            profiles::receive_link(app, url.to_string());
+        }
+    }
+    // Packages register the scheme when installed; a portable copy (AppImage,
+    // development build) registers itself, which also points the link at
+    // wherever it is now.
+    let installed = cfg!(target_os = "linux")
+        && std::env::var_os("APPIMAGE").is_none()
+        && std::env::current_exe().is_ok_and(|exe| exe.starts_with("/usr"));
+    if !installed {
+        let handle = app.clone();
+        std::thread::spawn(move || {
+            if let Err(e) = handle.deep_link().register_all() {
+                eprintln!("could not register {}:// links: {e}", sc_launch::packs::SCHEME);
+            }
+        });
+    }
 }
 
 fn main() {
@@ -65,9 +98,12 @@ fn main() {
         .manage(lifecycle::Lifecycle::default())
         .manage(prefs::PrefsState::default())
         .manage(game::GameState::default())
+        .manage(profiles::PackReviews::default())
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             lifecycle::restore(app);
         }))
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_window_state::Builder::new()
                 .with_denylist(&["splash"])
@@ -90,6 +126,7 @@ fn main() {
                 }
             }
             lifecycle::setup(app.handle());
+            setup_pack_links(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -130,6 +167,13 @@ fn main() {
                 profiles::save_profile,
                 profiles::delete_profile,
                 profiles::open_profile_folder,
+                profiles::open_pack_link,
+                profiles::inspect_pack,
+                profiles::install_pack,
+                profiles::discard_pack,
+                profiles::pick_pack_file,
+                profiles::check_pack_updates,
+                profiles::take_pending_link,
                 app_version,
             ];
             handler(invoke)

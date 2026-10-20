@@ -163,6 +163,9 @@ fn start_game(app: &AppHandle) -> Result<(), String> {
     }
     let dir = crate::profiles::profiles_dir()?.join(&selected);
     profiles::load(&dir)?;
+    if let Some(warning) = profiles::read_pack(&dir).ok().and_then(|p| sc_launch::packs::game_build_warning(&p, &setup.game_exe())) {
+        notify(app, warning, NotificationLevel::Info);
+    }
     let mut cmd = launch::command(&setup, &dir, &[])?;
 
     // Proton and the injector are chatty; keep their output for troubleshooting.
@@ -214,6 +217,11 @@ fn start_game(app: &AppHandle) -> Result<(), String> {
         }
     });
     Ok(())
+}
+
+/// The detected game.exe, once the setup has been found.
+pub fn game_exe(app: &AppHandle) -> Option<std::path::PathBuf> {
+    app.state::<GameState>().0.lock().unwrap().setup.as_ref().map(|s| s.game_exe())
 }
 
 #[tauri::command]
@@ -335,11 +343,11 @@ pub fn view_game_install(app: AppHandle) -> Result<(), String> {
         .as_ref()
         .map(|s| s.game_dir.clone())
         .ok_or("The game folder has not been found yet.")?;
-    crate::open_path(&app, &dir)
+    crate::open_path(&app, dir.as_os_str())
 }
 
 #[tauri::command]
 pub fn view_launch_log(app: AppHandle) -> Result<(), String> {
     let log = launch_log().filter(|p| p.is_file()).ok_or("The game has not been started from the launcher yet.")?;
-    crate::open_path(&app, &log)
+    crate::open_path(&app, log.as_os_str())
 }

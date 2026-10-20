@@ -1,6 +1,10 @@
 //! Where profiles live and how they're named.
+//!
+//! A profile is a folder under the profiles folder holding a server pack
+//! (`pack.json`, `resources/`, `files/`) and the player's `local.json`.
 
-use sc_profile::{Profile, PROFILE_FILE};
+use sc_profile::{Local, Pack, PatchDef, Profile, LOCAL_FILE, PACK_FILE};
+use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
 /// Folder name under the platform data folder; matches the Tauri identifier so
@@ -8,6 +12,8 @@ use std::path::{Path, PathBuf};
 const DATA_FOLDER: &str = "star-forge";
 /// Name used before the STAR FORGE rename; its data is moved over on first use.
 const OLD_DATA_FOLDER: &str = "sc-launcher";
+/// Profile file used before server packs; converted on first load.
+const LEGACY_FILE: &str = "profile.toml";
 
 fn platform_data_root() -> Option<PathBuf> {
     #[cfg(windows)]
@@ -44,22 +50,83 @@ pub fn valid_name(name: &str) -> bool {
     !name.is_empty()
         && name != "."
         && name != ".."
+        && !name.starts_with('.')
         && !name.contains(['/', '\\', ':', '\0'])
+}
+
+/// Lower-case letters, digits and dashes, for folder names and pack ids.
+pub fn slug(name: &str) -> String {
+    let mut out = String::new();
+    for c in name.chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c.to_ascii_lowercase());
+        } else if !out.ends_with('-') && !out.is_empty() {
+            out.push('-');
+        }
+    }
+    let out = out.trim_end_matches('-').chars().take(40).collect::<String>();
+    if out.is_empty() { "profile".into() } else { out.trim_end_matches('-').to_string() }
+}
+
+/// A free folder name under `root` based on `name`.
+pub fn free_name(root: &Path, name: &str) -> String {
+    let base = slug(name);
+    let mut id = base.clone();
+    let mut n = 2;
+    while root.join(&id).exists() {
+        id = format!("{base}-{n}");
+        n += 1;
+    }
+    id
+}
+
+/// Whether `dir` looks like a profile (possibly one still to be converted).
+pub fn is_profile(dir: &Path) -> bool {
+    dir.join(PACK_FILE).is_file() || dir.join(LEGACY_FILE).is_file()
 }
 
 pub struct Entry {
     pub name: String,
     pub dir: PathBuf,
     pub profile: Result<Profile, String>,
+    /// The pack as written, when it parses.
+    pub pack: Option<Pack>,
+}
+
+pub fn read_pack(dir: &Path) -> Result<Pack, String> {
+    let path = dir.join(PACK_FILE);
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    Pack::from_json(&text).map_err(|e| e.to_string())
+}
+
+pub fn read_local(dir: &Path) -> Result<Local, String> {
+    match std::fs::read_to_string(dir.join(LOCAL_FILE)) {
+        Ok(text) => Local::from_json(&text).map_err(|e| e.to_string()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Local::default()),
+        Err(e) => Err(format!("{}: {e}", dir.join(LOCAL_FILE).display())),
+    }
+}
+
+/// Writes through a temporary file so a crash never leaves half a file.
+pub fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let tmp = path.with_file_name(format!(".{name}.tmp"));
+    std::fs::write(&tmp, text).map_err(|e| format!("{}: {e}", tmp.display()))?;
+    std::fs::rename(&tmp, path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+pub fn write_local(dir: &Path, local: &Local) -> Result<(), String> {
+    write_atomic(&dir.join(LOCAL_FILE), &local.to_json())
+}
+
+pub fn write_pack(dir: &Path, pack: &Pack) -> Result<(), String> {
+    pack.validate().map_err(|e| e.to_string())?;
+    write_atomic(&dir.join(PACK_FILE), &pack.to_json())
 }
 
 pub fn load(dir: &Path) -> Result<Profile, String> {
-    let text = std::fs::read_to_string(dir.join(PROFILE_FILE))
-        .map_err(|e| format!("{}: {e}", dir.join(PROFILE_FILE).display()))?;
-    let profile = Profile::from_toml(&text).map_err(|e| e.to_string())?;
-    profile.patches().map_err(|e| e.to_string())?;
-    profile.address_cfg().map_err(|e| e.to_string())?;
-    Ok(profile)
+    migrate_legacy(dir)?;
+    Profile::load(dir).map_err(|e| e.to_string())
 }
 
 pub fn list(profiles_dir: &Path) -> Vec<Entry> {
@@ -67,12 +134,14 @@ pub fn list(profiles_dir: &Path) -> Vec<Entry> {
         .into_iter()
         .flatten()
         .flatten()
-        .filter(|e| e.path().join(PROFILE_FILE).is_file())
+        .filter(|e| valid_name(&e.file_name().to_string_lossy()) && is_profile(&e.path()))
         .map(|e| {
             let dir = e.path();
+            let profile = load(&dir);
             Entry {
                 name: e.file_name().to_string_lossy().into_owned(),
-                profile: load(&dir),
+                pack: read_pack(&dir).ok(),
+                profile,
                 dir,
             }
         })
@@ -81,17 +150,103 @@ pub fn list(profiles_dir: &Path) -> Vec<Entry> {
     out
 }
 
+/// The profile folder holding the pack with this id, if any.
+pub fn find_pack(profiles_dir: &Path, id: &str) -> Option<PathBuf> {
+    list(profiles_dir)
+        .into_iter()
+        .find(|e| e.pack.as_ref().is_some_and(|p| p.id == id))
+        .map(|e| e.dir)
+}
+
+/// `profile.toml` from before server packs.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Legacy {
+    #[serde(default)]
+    name: String,
+    server: Option<String>,
+    #[serde(default = "yes")]
+    local_server: bool,
+    #[serde(default)]
+    args: Vec<String>,
+    #[serde(default)]
+    trace_files: bool,
+    #[serde(default, rename = "patch")]
+    patches: Vec<PatchDef>,
+}
+
+fn yes() -> bool {
+    true
+}
+
+/// Converts a `profile.toml` profile to `pack.json` + `local.json`, keeping the
+/// old file as `profile.toml.migrated`.
+fn migrate_legacy(dir: &Path) -> Result<(), String> {
+    let legacy_path = dir.join(LEGACY_FILE);
+    if dir.join(PACK_FILE).exists() || !legacy_path.is_file() {
+        return Ok(());
+    }
+    let text = std::fs::read_to_string(&legacy_path).map_err(|e| format!("{}: {e}", legacy_path.display()))?;
+    let old: Legacy = toml::from_str(&text).map_err(|e| format!("{LEGACY_FILE}: {e}"))?;
+    let folder = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let mut pack = Pack {
+        format: sc_profile::PACK_FORMAT,
+        id: format!("local.{}", slug(&folder)),
+        name: if old.name.trim().is_empty() { folder } else { old.name },
+        version: "1.0.0".into(),
+        patches: old.patches,
+        ..Pack::default()
+    };
+    pack.server.address = old.server;
+    pack.server.local = old.local_server;
+    pack.game.args = old.args;
+    write_pack(dir, &pack)?;
+    if old.trace_files {
+        write_local(dir, &Local { trace_files: true, ..Local::default() })?;
+    }
+    std::fs::rename(&legacy_path, dir.join(format!("{LEGACY_FILE}.migrated"))).map_err(|e| format!("{}: {e}", legacy_path.display()))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::valid_name;
+    use super::*;
 
     #[test]
     fn names() {
         assert!(valid_name("starfury"));
         assert!(valid_name("local dev"));
         assert!(!valid_name(".."));
+        assert!(!valid_name(".staging"));
         assert!(!valid_name("a/b"));
         assert!(!valid_name(r"a\b"));
         assert!(!valid_name("C:x"));
+    }
+
+    #[test]
+    fn slugs() {
+        assert_eq!(slug("Starfury community server"), "starfury-community-server");
+        assert_eq!(slug("  Local (dev) "), "local-dev");
+        assert_eq!(slug("!!!"), "profile");
+    }
+
+    #[test]
+    fn migrates_profile_toml() {
+        let dir = std::env::temp_dir().join(format!("sf-migrate-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(LEGACY_FILE),
+            "name = \"Old\"\nserver = \"a.b:1\"\ntrace_files = true\n[[patch]]\noffset = \"0x10\"\noriginal = \"90\"\npatched = \"91\"\n",
+        )
+        .unwrap();
+        let p = load(&dir).unwrap();
+        assert_eq!(p.name, "Old");
+        assert_eq!(p.server.as_deref(), Some("a.b:1"));
+        assert!(p.local_server, "old default kept");
+        assert!(p.trace_files);
+        assert_eq!(p.patches.len(), 1);
+        assert!(dir.join("profile.toml.migrated").is_file());
+        assert!(read_pack(&dir).unwrap().id.starts_with("local.sf-migrate-"));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

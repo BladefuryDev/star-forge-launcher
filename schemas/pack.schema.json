@@ -1,0 +1,228 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/starfury-xyz/star-forge-launcher/main/schemas/pack.schema.json",
+  "title": "STAR FORGE server pack",
+  "description": "pack.json at the root of a STAR FORGE server pack. Paths are relative to the pack folder and use forward slashes.",
+  "type": "object",
+  "required": [
+    "format",
+    "id",
+    "name",
+    "version"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "format": {
+      "description": "Pack format version. The launcher refuses formats newer than it understands.",
+      "const": 1
+    },
+    "id": {
+      "description": "Unique, stable identifier, ideally a reversed domain you control. Used to recognise the pack when it is updated; never change it after release.",
+      "type": "string",
+      "pattern": "^[a-z0-9]+([.-][a-z0-9]+)*$",
+      "examples": [
+        "xyz.starfury.main"
+      ]
+    },
+    "name": {
+      "description": "Display name.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 48
+    },
+    "version": {
+      "description": "Pack version (semver). Bump it on every release so players see an update.",
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+([-+][0-9A-Za-z.-]+)?$"
+    },
+    "description": {
+      "description": "One or two sentences shown on the pack card.",
+      "type": "string",
+      "maxLength": 300
+    },
+    "authors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "links": {
+      "description": "Buttons shown on the play screen.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "website": {
+          "type": "string",
+          "format": "uri"
+        },
+        "discord": {
+          "type": "string",
+          "format": "uri"
+        },
+        "news": {
+          "type": "string",
+          "format": "uri"
+        },
+        "source": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "requires": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "launcher": {
+          "description": "Minimum STAR FORGE Launcher version, e.g. \"0.2.0\".",
+          "type": "string"
+        },
+        "game": {
+          "description": "SHA-256 (hex) of the win64/game.exe builds this pack was made for. The launcher warns players whose game.exe matches none of them.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$"
+          }
+        }
+      }
+    },
+    "server": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "description": "Master server host:port written to data/address.cfg. Omit to leave the game's own setting alone.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:-]+$"
+        },
+        "local": {
+          "description": "Also start the game's bundled local server (MongoDB + Hub). Leave false for remote servers.",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "game": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "description": "Extra game.exe arguments.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "branding": {
+      "description": "Look of the launcher while this pack is selected. Every entry is optional; missing ones fall back to STAR FORGE defaults.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "logo": {
+          "description": "Wordmark on the play screen. Transparent PNG, about 690x246.",
+          "$ref": "#/$defs/resource"
+        },
+        "icon": {
+          "description": "Square emblem for the pack list and rail. Transparent PNG, 256x256.",
+          "$ref": "#/$defs/resource"
+        },
+        "background": {
+          "description": "Play screen art. JPG/PNG/WebP, at least 1920x1080; the right side stays visible.",
+          "$ref": "#/$defs/resource"
+        },
+        "accent": {
+          "description": "Accent colour for buttons and highlights.",
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        }
+      }
+    },
+    "patches": {
+      "description": "Experimental: how client patches are applied will likely change. In-memory byte patches applied before the game runs; each is checked against the original bytes and skipped if they differ.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "offset",
+          "original",
+          "patched"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "module": {
+            "description": "File name of the module; defaults to game.exe.",
+            "type": "string",
+            "default": "game.exe"
+          },
+          "offset": {
+            "description": "Offset from the module base, e.g. \"0x1A2B3C\".",
+            "type": "string",
+            "pattern": "^(0[xX][0-9a-fA-F_]+|[0-9_]+)$"
+          },
+          "original": {
+            "description": "Hex bytes expected at the offset.",
+            "$ref": "#/$defs/hex"
+          },
+          "patched": {
+            "description": "Hex bytes to write; same length as original.",
+            "$ref": "#/$defs/hex"
+          }
+        }
+      }
+    },
+    "update": {
+      "description": "Where the launcher checks for new versions: the URL of your published pack.json (the copy with download filled in). Packs installed from a published pack.json get this set automatically.",
+      "type": "object",
+      "required": [
+        "url"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        }
+      }
+    },
+    "download": {
+      "description": "Only in the published pack.json: where the pack's zip is and its SHA-256. The launcher refuses a download that doesn't match.",
+      "type": "object",
+      "required": [
+        "url",
+        "sha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}$"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "resource": {
+      "type": "string",
+      "pattern": "^resources/[^\\\\]+$"
+    },
+    "hex": {
+      "type": "string",
+      "pattern": "^\\s*([0-9a-fA-F]{2}\\s*)+$"
+    }
+  }
+}

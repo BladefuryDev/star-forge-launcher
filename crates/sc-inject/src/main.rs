@@ -22,7 +22,7 @@ fn main() {
 
 #[cfg(windows)]
 mod win {
-    use sc_profile::{normalize, windows_path_from_arg, Profile, FILES_DIR, PROFILE_ENV, PROFILE_FILE};
+    use sc_profile::{normalize, windows_path_from_arg, Profile, FILES_DIR, PROFILE_ENV};
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     use std::path::{Path, PathBuf};
@@ -111,9 +111,7 @@ mod win {
     pub fn run() -> Result<u32, String> {
         let args = parse_args()?;
         let profile_dir = normalize(&args.profile);
-        let profile_text = std::fs::read_to_string(Path::new(&profile_dir).join(PROFILE_FILE))
-            .map_err(|e| format!("{profile_dir}\\{PROFILE_FILE}: {e}"))?;
-        let profile = Profile::from_toml(&profile_text).map_err(|e| e.to_string())?;
+        let profile = Profile::load(Path::new(&profile_dir)).map_err(|e| e.to_string())?;
         profile.patches().map_err(|e| e.to_string())?; // fail before launching, not in-game
 
         if let Some(cfg) = profile.address_cfg().map_err(|e| e.to_string())? {

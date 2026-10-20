@@ -6,5 +6,6 @@
 pub mod compat;
 pub mod env;
 pub mod launch;
+pub mod packs;
 pub mod profiles;
 pub mod steam;
