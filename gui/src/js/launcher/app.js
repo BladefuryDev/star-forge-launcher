@@ -7,6 +7,7 @@ import { bindSettings } from './settings.js';
 import { bindProfiles } from './profiles.js';
 import { bindPacks } from './packs.js';
 import { bindArtwork } from './artwork.js';
+import { bindBranding } from './branding.js';
 import { startupStep, showStartupFailure } from './startup.js';
 import { control, required, notice, run } from './ui.js';
 
@@ -17,6 +18,7 @@ async function start() {
   document.documentElement.dataset.faction = preferences.get().factionTheme;
   const store = createLauncherStore(launcherBridge);
   const profiles = bindProfiles(preferences, () => render());
+  const branding = bindBranding(profiles, preferences);
   /** @type {Record<import('./state.js').LauncherPhase, string>} */
   const labels = {
     checking: 'CHECKING',
@@ -35,6 +37,7 @@ async function start() {
   };
   let lastReason = '';
   const render = () => {
+    branding();
     const state = store.getSnapshot();
     if (!state) return;
     const button = control('play-button', HTMLButtonElement);
@@ -86,7 +89,7 @@ async function start() {
         return phase === 'launching' || phase === 'running';
       }),
     );
-    run(bindArtwork);
+    run(() => bindArtwork(preferences));
     run(() => invoke('initialize_launcher'));
   } catch (error) {
     store.dispose();

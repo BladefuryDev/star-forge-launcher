@@ -33,7 +33,7 @@ pub enum Faction {
     Jericho,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Preferences {
     /// Folder name of the profile the play button uses.
@@ -41,10 +41,29 @@ pub struct Preferences {
     pub launch_behavior: LaunchBehavior,
     pub close_behavior: CloseBehavior,
     pub faction_theme: Faction,
+    /// Show the selected server pack's logo, icon, background and colour.
+    pub pack_branding: bool,
+    /// Folder of the player's own wallpapers; empty = Steam's banner.
+    pub background_folder: String,
     /// Game install folder; empty = find through Steam.
     pub game_directory: String,
     /// Proton build folder (Linux); empty = the one that last ran the game.
     pub proton_path: String,
+}
+
+impl Default for Preferences {
+    fn default() -> Self {
+        Self {
+            selected_profile: String::new(),
+            launch_behavior: LaunchBehavior::default(),
+            close_behavior: CloseBehavior::default(),
+            faction_theme: Faction::default(),
+            pack_branding: true,
+            background_folder: String::new(),
+            game_directory: String::new(),
+            proton_path: String::new(),
+        }
+    }
 }
 
 #[derive(Default)]

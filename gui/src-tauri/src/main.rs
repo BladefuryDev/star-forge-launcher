@@ -161,6 +161,7 @@ fn main() {
                 game::perform_launcher_action,
                 game::detect_compat_tools,
                 game::get_artwork,
+                game::pick_background_folder,
                 game::view_game_install,
                 game::view_launch_log,
                 profiles::list_profiles,
@@ -174,6 +175,7 @@ fn main() {
                 profiles::pick_pack_file,
                 profiles::check_pack_updates,
                 profiles::take_pending_link,
+                profiles::get_profile_branding,
                 app_version,
             ];
             handler(invoke)

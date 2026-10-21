@@ -209,8 +209,9 @@ fn stage_into(source: &Source, dir: &Path) -> Result<Staged, String> {
             ));
         }
     }
-    for (key, path) in [("logo", &pack.branding.logo), ("icon", &pack.branding.icon), ("background", &pack.branding.background)] {
-        if let Some(p) = path {
+    let b = &pack.branding;
+    for (key, paths) in [("logo", b.logo.as_slice()), ("icon", b.icon.as_slice()), ("background", b.background.as_slice())] {
+        for p in paths {
             if !root.join(p).is_file() {
                 warnings.push(format!("branding.{key} points at {p}, which is not in the pack"));
             }

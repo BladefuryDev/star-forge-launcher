@@ -307,29 +307,78 @@ fn steam_art(name: &str) -> Option<PathBuf> {
     None
 }
 
-fn data_url(path: &Path) -> Option<String> {
-    let mime = match path.extension()?.to_str()? {
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        _ => return None,
-    };
-    let bytes = std::fs::read(path).ok()?;
-    if bytes.len() > 8 << 20 {
+/// An image as a data URL: PNG, JPEG or WebP by its contents, up to 8 MB.
+pub fn data_url(path: &Path) -> Option<String> {
+    if std::fs::metadata(path).ok()?.len() > 8 << 20 {
+        eprintln!("{}: too large for artwork (8 MB at most)", path.display());
         return None;
     }
+    let bytes = std::fs::read(path).ok()?;
+    let mime = match bytes.as_slice() {
+        [0x89, b'P', b'N', b'G', ..] => "image/png",
+        [0xff, 0xd8, 0xff, ..] => "image/jpeg",
+        [b'R', b'I', b'F', b'F', _, _, _, _, b'W', b'E', b'B', b'P', ..] => "image/webp",
+        _ => {
+            eprintln!("{}: not a PNG, JPEG or WebP image", path.display());
+            return None;
+        }
+    };
     Some(format!(
         "data:{mime};base64,{}",
         base64::engine::general_purpose::STANDARD.encode(bytes)
     ))
 }
 
-/// Star Conflict artwork from the local Steam install (nothing is bundled).
+/// A number below `n` that differs from run to run (n > 0).
+pub fn random_below(n: usize) -> usize {
+    use std::hash::{BuildHasher, Hasher};
+    let seed = std::collections::hash_map::RandomState::new().build_hasher().finish();
+    (seed % n as u64) as usize
+}
+
+/// A random image from the player's background folder (not its subfolders).
+fn folder_background(dir: &str) -> Option<String> {
+    if dir.trim().is_empty() {
+        return None;
+    }
+    let mut images: Vec<PathBuf> = std::fs::read_dir(dir.trim())
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            p.is_file()
+                && p.extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| matches!(e.to_ascii_lowercase().as_str(), "jpg" | "jpeg" | "png" | "webp"))
+        })
+        .collect();
+    images.sort();
+    if images.is_empty() {
+        return None;
+    }
+    // Start at a random image and take the first one that loads.
+    let start = random_below(images.len());
+    (0..images.len()).find_map(|i| data_url(&images[(start + i) % images.len()]))
+}
+
+/// The default play screen art: a random image from the player's background
+/// folder, else Star Conflict's banner from the local Steam install (nothing
+/// is bundled).
 #[tauri::command]
-pub async fn get_artwork() -> Artwork {
+pub async fn get_artwork(app: AppHandle) -> Artwork {
+    let folder = prefs::get(&app).background_folder;
     Artwork {
-        hero: steam_art("library_hero.jpg").and_then(|p| data_url(&p)),
+        hero: folder_background(&folder).or_else(|| steam_art("library_hero.jpg").and_then(|p| data_url(&p))),
         logo: steam_art("logo.png").and_then(|p| data_url(&p)),
     }
+}
+
+/// Lets the player choose their background folder.
+#[tauri::command]
+pub async fn pick_background_folder(app: AppHandle) -> Option<String> {
+    use tauri_plugin_dialog::DialogExt;
+    let dir = app.dialog().file().set_title("Background folder").blocking_pick_folder()?;
+    dir.into_path().ok().map(|p| p.to_string_lossy().into_owned())
 }
 
 #[tauri::command]

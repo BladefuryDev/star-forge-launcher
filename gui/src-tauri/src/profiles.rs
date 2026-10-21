@@ -231,6 +231,41 @@ pub fn open_pack_link(app: AppHandle, id: String, key: String) -> Result<(), Str
     crate::open_path(&app, std::ffi::OsStr::new(&url))
 }
 
+#[derive(Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct BrandingInfo {
+    logo: Option<String>,
+    icon: Option<String>,
+    background: Option<String>,
+    accent: Option<String>,
+}
+
+/// A pack image as a data URL. The file must really sit inside the pack's
+/// `resources/` (symlinks out are refused).
+fn resource_image(dir: &std::path::Path, path: Option<&str>) -> Option<String> {
+    let rel = sc_profile::resource_rel(path?)?;
+    let root = dir.join(sc_profile::RESOURCES_DIR).canonicalize().ok()?;
+    let file = root.join(rel).canonicalize().ok().filter(|f| f.starts_with(&root))?;
+    crate::game::data_url(&file)
+}
+
+/// The selected pack's artwork and colour; missing entries use the defaults.
+#[tauri::command]
+pub async fn get_profile_branding(id: String) -> Result<BrandingInfo, String> {
+    let dir = profile_dir(&id)?;
+    let Ok(pack) = profiles::read_pack(&dir) else { return Ok(BrandingInfo::default()) };
+    let b = &pack.branding;
+    Ok(BrandingInfo {
+        logo: resource_image(&dir, b.logo.as_deref()),
+        icon: resource_image(&dir, b.icon.as_deref()),
+        background: match b.background.len() {
+            0 => None,
+            n => resource_image(&dir, Some(&b.background[crate::game::random_below(n)])),
+        },
+        accent: b.accent.clone(),
+    })
+}
+
 /// Packs unpacked for review, by token, until installed or discarded.
 #[derive(Default)]
 pub struct PackReviews {

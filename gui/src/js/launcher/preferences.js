@@ -1,5 +1,5 @@
 import { invoke } from './bridge.js';
-import { object, choice, string } from './contracts.js';
+import { boolean, object, choice, string } from './contracts.js';
 
 export const factions = /** @type {const} */ (['starforge', 'starfury', 'empire', 'federation', 'jericho']);
 
@@ -9,6 +9,8 @@ export function parsePreferences(input) {
   return {
     selectedProfile: string(value.selectedProfile),
     factionTheme: choice(value.factionTheme, factions),
+    packBranding: boolean(value.packBranding),
+    backgroundFolder: string(value.backgroundFolder),
     launchBehavior: choice(value.launchBehavior, ['tray', 'keepOpen', 'exit']),
     closeBehavior: choice(value.closeBehavior, ['tray', 'exit']),
     gameDirectory: string(value.gameDirectory),

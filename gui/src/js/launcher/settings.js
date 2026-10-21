@@ -18,7 +18,9 @@ export async function bindSettings(preferences, store) {
         ? `
       <section class="setting-group"><h2>Window behavior</h2>${row('After starting the game', 'Choose where the launcher stays while you play.', 'launch-behavior', '<select id="launch-behavior" data-preference="launchBehavior"><option value="tray">Minimize to tray</option><option value="keepOpen">Keep launcher open</option><option value="exit">Exit launcher</option></select>')}
       ${row('When closing the launcher', 'Choose what happens when you click X.', 'close-behavior', '<select id="close-behavior" data-preference="closeBehavior"><option value="tray">Minimize to tray</option><option value="exit">Exit launcher</option></select>')}</section>
-      <section class="setting-group"><h2>Appearance</h2><span>Faction color</span><div class="faction-options">${factions.map((name) => `<label class="faction-option"><input type="radio" name="faction-theme" data-preference="factionTheme" value="${name}"><span>${brand(name[0].toUpperCase() + name.slice(1))}</span></label>`).join('')}</div></section>`
+      <section class="setting-group"><h2>Appearance</h2><span>Faction color</span><div class="faction-options">${factions.map((name) => `<label class="faction-option"><input type="radio" name="faction-theme" data-preference="factionTheme" value="${name}"><span>${brand(name[0].toUpperCase() + name.slice(1))}</span></label>`).join('')}</div>
+      ${row('Server pack look', 'Show the selected server pack’s logo, icon, background and color. Its color replaces the faction color.', 'pack-branding', '<input id="pack-branding" data-preference="packBranding" type="checkbox">')}
+      ${row('Background folder', 'Your own wallpapers: one is picked at random each time the launcher starts, unless the server pack brings its own.', 'background-folder', '<span class="folder-field"><input id="background-folder" data-preference="backgroundFolder" type="text" spellcheck="false" placeholder="Steam banner"><button class="button" id="pick-background-folder">Browse…</button></span>')}</section>`
         : `
       <section class="setting-group"><h2>Installation</h2>
       ${row('Game folder', 'Leave empty to find Star Conflict through Steam.', 'game-directory', '<input id="game-directory" data-preference="gameDirectory" type="text" spellcheck="false" placeholder="Found through Steam">')}
@@ -45,6 +47,8 @@ export async function bindSettings(preferences, store) {
       if (!entry) return;
       if (input instanceof HTMLInputElement && input.type === 'radio')
         input.checked = input.value === entry[1];
+      else if (input instanceof HTMLInputElement && input.type === 'checkbox')
+        input.checked = entry[1] === true;
       else input.value = String(entry[1]);
     });
     const state = store.getSnapshot();
@@ -69,7 +73,9 @@ export async function bindSettings(preferences, store) {
       run(() => preferences.update(key, choice(input.value, ['tray', 'keepOpen', 'exit'])));
     else if (key === 'closeBehavior')
       run(() => preferences.update(key, choice(input.value, ['tray', 'exit'])));
-    else if (key === 'gameDirectory' || key === 'protonPath')
+    else if (key === 'packBranding' && input instanceof HTMLInputElement)
+      run(() => preferences.update(key, input.checked));
+    else if (key === 'gameDirectory' || key === 'protonPath' || key === 'backgroundFolder')
       run(() => preferences.update(key, input.value.trim()));
   });
   document.addEventListener('click', (event) => {
@@ -85,6 +91,11 @@ export async function bindSettings(preferences, store) {
       render();
     }
     if (button.id === 'open-settings') run(() => preferences.reload());
+    if (button.id === 'pick-background-folder')
+      run(async () => {
+        const dir = await invoke('pick_background_folder');
+        if (typeof dir === 'string') await preferences.update('backgroundFolder', dir);
+      });
     if (button.dataset.command && button.closest('#settings-content'))
       run(() => invoke(button.dataset.command || ''));
   });

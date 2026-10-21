@@ -166,8 +166,10 @@ packages and attaches them to a draft release for review before publishing.
 - [x] Pack updates from the server's published `pack.json`, checksum-verified,
       keeping the player's own changes
 - [x] Warn when a pack was made for a different game build
-- [ ] Per-profile branding: show the pack's logo, background and accent colour
-      (the format already carries them)
+- [x] Per-pack branding: the selected pack's logo, icon, background (one, or
+      a random pick from a list) and accent colour; can be turned off in Settings
+- [x] Background folder setting: a random wallpaper of your own when the pack
+      has no background
 - [ ] Settle how client patches are applied (currently experimental)
 - [ ] Export a profile as a pack zip from the launcher
 - [ ] Profile editor for patches and extra arguments in the UI

@@ -133,15 +133,42 @@ pub struct Branding {
     pub logo: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub background: Option<String>,
+    /// One path or a list; the launcher shows one at random.
+    #[serde(default, skip_serializing_if = "Vec::is_empty", with = "one_or_many")]
+    pub background: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accent: Option<String>,
 }
 
+/// A string, or a list of strings; a single entry is written back as a string.
+mod one_or_many {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Value {
+        One(String),
+        Many(Vec<String>),
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
+        Ok(match Value::deserialize(d)? {
+            Value::One(s) => vec![s],
+            Value::Many(v) => v,
+        })
+    }
+
+    pub fn serialize<S: Serializer>(v: &[String], s: S) -> Result<S::Ok, S::Error> {
+        match v {
+            [one] => one.serialize(s),
+            _ => v.serialize(s),
+        }
+    }
+}
+
 impl Branding {
     fn is_empty(&self) -> bool {
-        self.logo.is_none() && self.icon.is_none() && self.background.is_none() && self.accent.is_none()
+        self.logo.is_none() && self.icon.is_none() && self.background.is_empty() && self.accent.is_none()
     }
 }
 
@@ -264,8 +291,10 @@ impl Pack {
         if let Some(a) = &self.server.address {
             check_address(a)?;
         }
-        for (key, path) in [("logo", &self.branding.logo), ("icon", &self.branding.icon), ("background", &self.branding.background)] {
-            if let Some(p) = path {
+        let b = &self.branding;
+        let images = [("logo", b.logo.as_slice()), ("icon", b.icon.as_slice()), ("background", b.background.as_slice())];
+        for (key, paths) in images {
+            for p in paths {
                 if resource_rel(p).is_none() {
                     return err(format!("branding.{key} {p:?}: must be a file inside resources/"));
                 }
@@ -437,7 +466,7 @@ pub fn parse_offset(s: &str) -> Result<usize, String> {
 
 pub fn parse_hex(s: &str) -> Result<Vec<u8>, String> {
     let digits: String = s.chars().filter(|c| !c.is_whitespace()).collect();
-    if digits.len() % 2 != 0 {
+    if !digits.len().is_multiple_of(2) {
         return Err(format!("odd number of hex digits in {s:?}"));
     }
     (0..digits.len())
@@ -614,6 +643,8 @@ mod tests {
         assert!(bad(r#"{"branding":{"logo":"../logo.png"}}"#));
         assert!(bad(r#"{"branding":{"logo":"resources/../x"}}"#));
         assert!(bad(r#"{"branding":{"accent":"red"}}"#));
+        assert!(!bad(r#"{"branding":{"background":["resources/a.jpg","resources/b.jpg"]}}"#));
+        assert!(bad(r#"{"branding":{"background":["resources/a.jpg","../b.jpg"]}}"#));
         assert!(bad(r#"{"requires":{"game":["abc"]}}"#));
         assert!(bad(r#"{"patches":[{"offset":"0x10","original":"90","patched":"90 90"}]}"#));
         assert!(bad(r#"{"patches":[{"module":"..\\x.dll","offset":"0x10","original":"90","patched":"91"}]}"#));
@@ -637,5 +668,19 @@ mod tests {
         let again = pack(&p.to_json());
         assert_eq!(again.id, p.id);
         assert!(!p.to_json().contains("patches"));
+    }
+
+    #[test]
+    fn background_is_one_or_many() {
+        let with = |bg: &str| {
+            let mut v: serde_json::Value = serde_json::from_str(MINIMAL).unwrap();
+            v["branding"] = serde_json::from_str(&format!(r#"{{"background":{bg}}}"#)).unwrap();
+            pack(&v.to_string())
+        };
+        let one = with(r#""resources/a.jpg""#);
+        assert_eq!(one.branding.background, ["resources/a.jpg"]);
+        assert!(one.to_json().contains(r#""background": "resources/a.jpg""#));
+        let many = with(r#"["resources/a.jpg","resources/b.jpg"]"#);
+        assert_eq!(pack(&many.to_json()).branding.background.len(), 2);
     }
 }

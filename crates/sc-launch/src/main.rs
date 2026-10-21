@@ -172,7 +172,7 @@ fn run() -> Result<u8, String> {
                 Some(a) => install_reviewed(packs::stage(&packs::Source::Url(a.url))?, &profiles_dir, cli.yes),
             }
         }
-        _ => Err(format!("unknown command; see sc-launch --help")),
+        _ => Err("unknown command; see sc-launch --help".into()),
     }
 }
 

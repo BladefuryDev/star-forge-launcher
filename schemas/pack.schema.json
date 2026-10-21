@@ -133,8 +133,19 @@
           "$ref": "#/$defs/resource"
         },
         "background": {
-          "description": "Play screen art. JPG/PNG/WebP, at least 1920x1080; the right side stays visible.",
-          "$ref": "#/$defs/resource"
+          "description": "Play screen art: one image, or a list the launcher picks from at random each time it starts. JPG/PNG/WebP, at least 1920x1080, up to 8 MB each; the right side stays visible.",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/resource"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/resource"
+              }
+            }
+          ]
         },
         "accent": {
           "description": "Accent colour for buttons and highlights.",

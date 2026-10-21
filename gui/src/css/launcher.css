@@ -518,6 +518,19 @@ dialog footer {
 .setting-row input[type='range'] {
   width: 155px;
 }
+.folder-field {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+.folder-field input {
+  width: 210px;
+}
+.setting-row input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
 .faction-options {
   display: flex;
   gap: 10px;
