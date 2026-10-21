@@ -121,7 +121,7 @@ development builds and the scripts read it automatically:
 
 | Variable | Overrides |
 |---|---|
-| `STAR_FORGE_GAME_DIR` | Star Conflict install folder |
+| `STAR_FORGE_GAME_DIR` | Star Conflict install folder (also the patcher's default `cloud/` for tests) |
 | `STAR_FORGE_TOOLS_DIR` | folder with `sc-inject.exe` and `sc_agent.dll` |
 | `STAR_FORGE_PROTON` | Proton build (Linux) |
 | `STAR_FORGE_DATA_DIR` | launcher data folder (preferences, profiles, log) |
@@ -150,6 +150,7 @@ sc-launch update <profile>           # install the newest version of a profile's
 | `crates/sc-inject` | `sc-inject.exe`, starts the game and injects the agent |
 | `crates/sc-launch` | finds Steam, the game and Proton; profile storage; the `sc-launch` CLI |
 | `gui/` | the Tauri desktop launcher (`gui/src` web UI, `gui/src-tauri` Rust side) |
+| `patcher/` | server patcher (C++): applies a server's source-controlled patches to the `cloud/` exes in memory at startup, via a proxy DLL. Built separately with `make`; see [patcher/README.md](patcher/README.md) |
 | `scripts/` | build and desktop-integration scripts |
 
 ## Releasing

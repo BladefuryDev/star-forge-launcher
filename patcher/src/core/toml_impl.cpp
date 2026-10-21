@@ -1,0 +1,3 @@
+// The one translation unit that compiles toml++ (everything else builds with TOML_HEADER_ONLY=0).
+#define TOML_IMPLEMENTATION
+#include "toml.hpp"
