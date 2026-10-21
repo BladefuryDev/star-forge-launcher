@@ -29,6 +29,10 @@ mod win {
     use std::ptr::{null, null_mut};
     use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, HANDLE, WAIT_OBJECT_0};
     use windows_sys::Win32::System::Diagnostics::Debug::WriteProcessMemory;
+    use windows_sys::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectBasicAccountingInformation, QueryInformationJobObject,
+        TerminateJobObject, JOBOBJECT_BASIC_ACCOUNTING_INFORMATION,
+    };
     use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
     use windows_sys::Win32::System::Memory::{
         VirtualAllocEx, VirtualFreeEx, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE,
@@ -178,6 +182,14 @@ mod win {
             return Err(last_error("CreateProcessW"));
         }
 
+        // Everything the game starts (the bundled local server, for one) joins
+        // this job, so it can be stopped with the game; otherwise leftovers
+        // keep the Proton session, and the launcher, waiting.
+        let job = unsafe { CreateJobObjectW(null(), null()) };
+        if job.is_null() || unsafe { AssignProcessToJobObject(job, pi.hProcess) } == 0 {
+            eprintln!("sc-inject: {}; processes the game starts will outlive it", last_error("job object setup"));
+        }
+
         if let Err(e) = inject(pi.hProcess, &dll) {
             unsafe {
                 TerminateProcess(pi.hProcess, 1);
@@ -197,6 +209,21 @@ mod win {
             GetExitCodeProcess(pi.hProcess, &mut code);
             CloseHandle(pi.hProcess);
             println!("sc-inject: game exited with {code}");
+            if !job.is_null() {
+                let mut info: JOBOBJECT_BASIC_ACCOUNTING_INFORMATION = std::mem::zeroed();
+                let ok = QueryInformationJobObject(
+                    job,
+                    JobObjectBasicAccountingInformation,
+                    (&mut info as *mut JOBOBJECT_BASIC_ACCOUNTING_INFORMATION).cast(),
+                    std::mem::size_of_val(&info) as u32,
+                    null_mut(),
+                );
+                if ok != 0 && info.ActiveProcesses > 0 {
+                    println!("sc-inject: stopping {} process(es) the game left running", info.ActiveProcesses);
+                }
+                TerminateJobObject(job, 0);
+                CloseHandle(job);
+            }
             Ok(code)
         }
     }
