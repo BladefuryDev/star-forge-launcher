@@ -76,12 +76,16 @@ pub fn list_profiles() -> Result<Vec<ProfileInfo>, String> {
                     .unwrap_or_default(),
             };
             match &e.profile {
-                Ok(p) => ProfileInfo {
-                    server: p.server.clone(),
-                    local_server: p.local_server,
-                    patches: p.patches.len(),
-                    ..base(if p.name.trim().is_empty() { e.name.clone() } else { p.name.clone() })
-                },
+                Ok(p) => {
+                    let patching = sc_launch::patching::summary(&e.dir, p);
+                    ProfileInfo {
+                        server: p.server.clone(),
+                        local_server: p.local_server,
+                        patches: patching.patches,
+                        error: patching.errors.first().cloned(),
+                        ..base(if p.name.trim().is_empty() { e.name.clone() } else { p.name.clone() })
+                    }
+                }
                 Err(err) => ProfileInfo { error: Some(err.clone()), ..base(e.name.clone()) },
             }
         })
@@ -304,6 +308,7 @@ pub struct PackReview {
     local_server: bool,
     args: Vec<String>,
     patches: usize,
+    plugins: usize,
     file_count: usize,
     files: Vec<String>,
     warnings: Vec<String>,
@@ -316,9 +321,16 @@ const FILES_SHOWN: usize = 50;
 fn review_of(token: u64, staged: &packs::Staged, game_exe: Option<PathBuf>) -> Result<PackReview, String> {
     let pack = &staged.pack;
     let mut warnings = staged.warnings.clone();
-    if let Some(w) = game_exe.and_then(|exe| packs::game_build_warning(pack, &exe)) {
-        warnings.push(w);
+    let plain = sc_profile::Profile::new(pack, &Local::default());
+    if let Some(exe) = game_exe {
+        warnings.extend(packs::game_build_warning(pack, &exe));
+        // Tells the player now, not at Play, when the patches can't apply to their game.
+        match sc_launch::patching::preflight(&staged.root, &plain, &exe) {
+            Ok(w) => warnings.extend(w),
+            Err(e) => warnings.push(e),
+        }
     }
+    let patching = sc_launch::patching::summary(&staged.root, &plain);
     let update = match profiles::find_pack(&profiles_dir()?, &pack.id) {
         Some(dir) => {
             let old = profiles::read_pack(&dir)?;
@@ -330,7 +342,7 @@ fn review_of(token: u64, staged: &packs::Staged, game_exe: Option<PathBuf>) -> R
                 name: old.name,
                 version: old.version,
                 server: old.server.address,
-                patches: old.patches.len(),
+                patches: sc_launch::patching::summary(&dir, &profiles::load(&dir).unwrap_or_default()).patches,
                 files_added: added,
                 files_removed: removed,
             })
@@ -350,7 +362,8 @@ fn review_of(token: u64, staged: &packs::Staged, game_exe: Option<PathBuf>) -> R
         server: pack.server.address.clone(),
         local_server: pack.server.local,
         args: pack.game.args.clone(),
-        patches: pack.patches.len(),
+        patches: patching.patches,
+        plugins: patching.plugins,
         file_count: staged.files.len(),
         files: staged.files.iter().take(FILES_SHOWN).cloned().collect(),
         warnings,

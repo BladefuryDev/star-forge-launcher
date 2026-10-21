@@ -37,9 +37,10 @@ fn exe_path() -> String {
     String::from_utf16_lossy(&buf[..n as usize])
 }
 
-pub fn init() {
+/// Sets the agent up. Returns false when the game must not start.
+pub fn init() -> bool {
     let Ok(profile_dir) = std::env::var(PROFILE_ENV) else {
-        return; // Not launched by sc-launch: do nothing.
+        return true; // Not launched by sc-launch: do nothing.
     };
     let profile_dir = normalize(&profile_dir);
     let log_file = File::create(format!("{profile_dir}\\{AGENT_LOG}")).ok();
@@ -67,7 +68,7 @@ pub fn init() {
         Ok(p) => p,
         Err(e) => {
             log(&format!("profile error, agent disabled: {e}"));
-            return;
+            return true;
         }
     };
     if profile.trace_files {
@@ -80,14 +81,14 @@ pub fn init() {
         log(&format!("profile name: {}", profile.name));
     }
 
-    match profile.patches() {
-        Ok(list) => crate::patches::apply_all(&list),
-        Err(e) => log(&format!("patches skipped: {e}")),
+    if !crate::patches::apply_all(&profile_dir, &profile) {
+        return false;
     }
 
     if game_root.is_empty() {
         log("could not work out the game root; file redirects disabled");
-        return;
+        return true;
     }
     crate::hooks::install();
+    true
 }

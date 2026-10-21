@@ -23,8 +23,11 @@ on a Star Conflict server project.
   local server, extra game arguments.
 - **File overlays** – put files in a profile's `files/` folder and the game
   reads them instead of the originals, without touching the install.
-- **Byte patches** – verified in-memory patches applied before the game starts
-  (each one checks the original bytes first and is skipped if they differ).
+- **Client patches** (experimental) – patchsets in the same format as the
+  server patcher, applied to the game's memory before it runs. Every write
+  checks the original bytes, and the launcher checks the whole set against
+  your `game.exe` before starting, so a game update can't land a patch on
+  the wrong code. Packs can also ship native plugins for hooks.
 - **Linux and Windows** – on Linux the game runs through the same Proton build
   and prefix Steam uses, so your settings carry over; the Steam overlay works.
 - **Desktop launcher** with themes (STAR FORGE, STARFURY, Empire, Federation, Jericho),
@@ -79,6 +82,7 @@ profiles/my-server/
 ├── pack.json     the pack: name, server, branding, patches (replaced by updates)
 ├── resources/    the pack's artwork
 ├── files/        replacement game files, mirroring the game folder
+├── patches/      client patchsets (game.exe.patchset.toml) and plugins
 ├── local.json    your own changes on top of the pack (never touched by updates)
 └── agent.log     what the agent redirected and patched last launch
 ```
@@ -146,6 +150,7 @@ sc-launch update <profile>           # install the newest version of a profile's
 | Path | What |
 |---|---|
 | `crates/sc-profile` | profile format and path mapping shared by everything |
+| `crates/sc-patch` | patchset format, checking and applying (shared by the agent and the launcher; same format as `patcher/`) |
 | `crates/sc-agent` | `sc_agent.dll`, the injected agent (file redirection, patches) |
 | `crates/sc-inject` | `sc-inject.exe`, starts the game and injects the agent |
 | `crates/sc-launch` | finds Steam, the game and Proton; profile storage; the `sc-launch` CLI |
@@ -171,7 +176,13 @@ packages and attaches them to a draft release for review before publishing.
       a random pick from a list) and accent colour; can be turned off in Settings
 - [x] Background folder setting: a random wallpaper of your own when the pack
       has no background
-- [ ] Settle how client patches are applied (currently experimental)
+- [x] Client patches: server-patcher patchsets applied in memory by the agent,
+      checked against `game.exe` before launch, plus native plugins
+- [ ] `sfp build` for x64 sources (today client patchsets are written resolved)
+- [ ] x64 midhooks in the agent (C++-style hooks without a plugin)
+- [ ] Let `files/` override members of `.pak` archives (the engine prefers
+      packed files over loose ones; needs a VFS hook)
+- [ ] Settle on patch methods beyond `inject` if needed
 - [ ] Export a profile as a pack zip from the launcher
 - [ ] Profile editor for patches and extra arguments in the UI
 - [ ] Pack signing, so players can tell a pack really comes from its server

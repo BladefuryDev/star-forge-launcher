@@ -91,7 +91,7 @@ fn run() -> Result<u8, String> {
                         e.name,
                         p.server.as_deref().unwrap_or("-"),
                         if p.local_server { "local server" } else { "client only" },
-                        p.patches.len(),
+                        sc_launch::patching::summary(&e.dir, &p).patches,
                         p.name
                     ),
                     Err(err) => println!("{:<20} INVALID: {err}", e.name),
@@ -124,6 +124,9 @@ fn run() -> Result<u8, String> {
             let profile = profiles::load(&dir)?;
             let setup = launch::resolve(&cli.opts)?;
             if let Some(warning) = profiles::read_pack(&dir).ok().and_then(|p| packs::game_build_warning(&p, &setup.game_exe())) {
+                eprintln!("warning: {warning}");
+            }
+            for warning in sc_launch::patching::preflight(&dir, &profile, &setup.game_exe())? {
                 eprintln!("warning: {warning}");
             }
             let mut cmd = launch::command(&setup, &dir, &cli.game_args)?;
@@ -199,8 +202,12 @@ fn install_reviewed(staged: packs::Staged, profiles_dir: &std::path::Path, yes: 
     if staged.files.len() > 20 {
         println!("    ... and {} more", staged.files.len() - 20);
     }
-    if !pack.patches.is_empty() {
-        println!("  applies {} game patch(es)", pack.patches.len());
+    let patches = sc_launch::patching::summary(&staged.root, &sc_profile::Profile::new(pack, &Default::default()));
+    if !patches.modules.is_empty() {
+        println!("  applies {} game patch(es) to {}", patches.patches, patches.modules.join(", "));
+    }
+    if patches.plugins > 0 {
+        println!("  loads {} native plugin(s) into the game", patches.plugins);
     }
     if !pack.game.args.is_empty() {
         println!("  game arguments: {}", pack.game.args.join(" "));

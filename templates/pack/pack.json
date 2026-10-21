@@ -22,6 +22,5 @@
     "icon": "resources/icon.png",
     "background": "resources/background.jpg",
     "accent": "#e39a29"
-  },
-  "patches": []
+  }
 }

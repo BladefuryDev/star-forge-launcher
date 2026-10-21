@@ -112,7 +112,11 @@ mod win {
         let args = parse_args()?;
         let profile_dir = normalize(&args.profile);
         let profile = Profile::load(Path::new(&profile_dir)).map_err(|e| e.to_string())?;
-        profile.patches().map_err(|e| e.to_string())?; // fail before launching, not in-game
+        // Fail before launching, not in-game.
+        for file in sc_profile::patchset_files(Path::new(&profile_dir)) {
+            let text = std::fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+            sc_patch::Patchset::parse(&text, &file.to_string_lossy()).map_err(|e| e.to_string())?;
+        }
 
         if let Some(cfg) = profile.address_cfg().map_err(|e| e.to_string())? {
             let dir = Path::new(&profile_dir).join(FILES_DIR).join("data");
@@ -238,7 +242,9 @@ mod win {
                 }
                 // The exit code is the low 32 bits of the module handle; 0 means it failed.
                 if module == 0 {
-                    return Err(format!("LoadLibraryW failed in the game for {dll}"));
+                    return Err(format!(
+                        "the agent ({dll}) did not load; if the pack has patches, they may not match this game build (see agent.log in the profile folder)"
+                    ));
                 }
                 Ok(())
             })();

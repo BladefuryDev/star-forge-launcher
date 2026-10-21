@@ -116,5 +116,6 @@ In your server's patch project:
   exe's static initializers write will be overwritten. Use a midhook later in startup for those.
 - Windows antivirus may flag a proxy DLL that patches memory. Wine doesn't care.
 - `CrashReporter.exe` and the legacy `StatServer.exe` don't import libcrypto. Neither is launched.
-- `game.exe` (the client) is 64-bit. Client patches would need an x64 build of the loader;
-  the patch format is meant to be shared.
+- `game.exe` (the client) is 64-bit and patched by the launcher's agent instead, which reads
+  the same patchset format (`crates/sc-patch`; see `templates/pack/patches/README.md`).
+  `sfp build` can't assemble x64 sources yet, so client patchsets are written resolved.

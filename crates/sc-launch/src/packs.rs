@@ -7,7 +7,7 @@
 //! player's `local.json`.
 
 use crate::profiles;
-use sc_profile::{Pack, FILES_DIR, PACK_FILE, RESOURCES_DIR};
+use sc_profile::{Pack, FILES_DIR, PACK_FILE, PATCHES_DIR, RESOURCES_DIR};
 use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -217,8 +217,22 @@ fn stage_into(source: &Source, dir: &Path) -> Result<Staged, String> {
             }
         }
     }
-    if !pack.patches.is_empty() {
-        warnings.push("This pack patches the game in memory. Patch support is experimental.".into());
+    let sets = crate::patching::load_sets(&root);
+    for e in sets.iter().filter_map(|s| s.as_ref().err()) {
+        warnings.push(format!("Broken patch file: {e}"));
+    }
+    if !sets.is_empty() {
+        warnings.push("This pack patches the game's code while it runs. Patch support is experimental.".into());
+    }
+    for p in &pack.patches.plugins {
+        if !sc_profile::patches_rel(p).is_some_and(|rel| root.join(PATCHES_DIR).join(rel).is_file()) {
+            warnings.push(format!("patches.plugins points at {p}, which is not in the pack"));
+        }
+    }
+    if !pack.patches.plugins.is_empty() {
+        warnings.push(
+            "This pack runs its own native code inside the game (plugins). Only install it if you trust whoever made it completely.".into(),
+        );
     }
     if pack.update.is_none() {
         warnings.push("This pack has no update address, so the launcher can't check for new versions.".into());
@@ -283,7 +297,7 @@ fn install_inner(staged: &Staged, profiles_dir: &Path) -> Result<String, String>
 }
 
 /// The parts of a profile folder that belong to the pack.
-const PACK_PARTS: [&str; 3] = [PACK_FILE, RESOURCES_DIR, FILES_DIR];
+const PACK_PARTS: [&str; 4] = [PACK_FILE, RESOURCES_DIR, FILES_DIR, PATCHES_DIR];
 
 fn replace_pack(new_root: &Path, profile: &Path) -> Result<(), String> {
     let old = profile.join(".update-old");
@@ -421,7 +435,7 @@ fn allowed(rel: &str) -> bool {
         return false; // .gitkeep, .DS_Store, ...
     }
     rel == PACK_FILE
-        || ((top == RESOURCES_DIR || top == FILES_DIR) && !file)
+        || ((top == RESOURCES_DIR || top == FILES_DIR || top == PATCHES_DIR) && !file)
         || (file && ["readme", "license", "changelog"].iter().any(|p| top.to_ascii_lowercase().starts_with(p)))
 }
 
@@ -482,7 +496,7 @@ fn copy_pack_folder(src: &Path, dest: &Path) -> Result<(), String> {
             let name = e.file_name().to_string_lossy().into_owned();
             let child = if rel.is_empty() { name } else { format!("{rel}/{name}") };
             let Ok(t) = e.file_type() else { continue };
-            if t.is_dir() && (child.contains('/') || child == RESOURCES_DIR || child == FILES_DIR) {
+            if t.is_dir() && (child.contains('/') || child == RESOURCES_DIR || child == FILES_DIR || child == PATCHES_DIR) {
                 walk(src, &child, dest, count)?;
             } else if t.is_file() && allowed(&child) {
                 *count += 1;
@@ -538,6 +552,7 @@ mod tests {
         assert!(allowed("pack.json"));
         assert!(allowed("files/data/address.cfg"));
         assert!(allowed("resources/logo.png"));
+        assert!(allowed("patches/game.exe.patchset.toml"));
         assert!(allowed("README.md"));
         assert!(!allowed("files"));
         assert!(!allowed("local.json"));

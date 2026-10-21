@@ -152,6 +152,28 @@ unsafe fn redirect(path: PCWSTR) -> Option<Vec<u16>> {
     result
 }
 
+/// For a folder under the game root that only exists in the profile (say
+/// `data\strings` when the profile overrides a packed file inside it): the
+/// profile folder, so attribute queries see it and the engine walks into it.
+unsafe fn profile_only_dir(path: PCWSTR) -> Option<Vec<u16>> {
+    guarded(|| {
+        let s = state()?;
+        let o = ORIG.get()?;
+        if (o.attrs_w)(path) != INVALID_FILE_ATTRIBUTES {
+            return None;
+        }
+        let rel = relative_to(&s.game_root, &full_path(path)?)?;
+        let candidate = wide(&profile_file(&s.profile_dir, &rel));
+        let attrs = (o.attrs_w)(candidate.as_ptr());
+        (attrs != INVALID_FILE_ATTRIBUTES && attrs & FILE_ATTRIBUTE_DIRECTORY != 0).then_some(candidate)
+    })
+}
+
+/// Where an attribute query should look: a redirected file, a profile-only folder, or nowhere else.
+unsafe fn attrs_target(path: PCWSTR) -> Option<Vec<u16>> {
+    redirect(path).or_else(|| profile_only_dir(path))
+}
+
 unsafe extern "system" fn create_file_w(
     name: PCWSTR, access: u32, share: u32, sa: *const SECURITY_ATTRIBUTES, disp: u32, flags: u32, tmpl: HANDLE,
 ) -> HANDLE {
@@ -174,7 +196,7 @@ unsafe extern "system" fn create_file_a(
 
 unsafe extern "system" fn get_attrs_w(name: PCWSTR) -> u32 {
     let o = ORIG.get().unwrap_unchecked();
-    match redirect(name) {
+    match attrs_target(name) {
         Some(p) => (o.attrs_w)(p.as_ptr()),
         None => (o.attrs_w)(name),
     }
@@ -182,7 +204,7 @@ unsafe extern "system" fn get_attrs_w(name: PCWSTR) -> u32 {
 
 unsafe extern "system" fn get_attrs_a(name: PCSTR) -> u32 {
     let o = ORIG.get().unwrap_unchecked();
-    if let Some(p) = ansi_to_wide(name).and_then(|w| redirect(w.as_ptr())) {
+    if let Some(p) = ansi_to_wide(name).and_then(|w| attrs_target(w.as_ptr())) {
         return (o.attrs_w)(p.as_ptr());
     }
     (o.attrs_a)(name)
@@ -190,7 +212,7 @@ unsafe extern "system" fn get_attrs_a(name: PCSTR) -> u32 {
 
 unsafe extern "system" fn get_attrs_ex_w(name: PCWSTR, level: i32, info: *mut c_void) -> BOOL {
     let o = ORIG.get().unwrap_unchecked();
-    match redirect(name) {
+    match attrs_target(name) {
         Some(p) => (o.attrs_ex_w)(p.as_ptr(), level, info),
         None => (o.attrs_ex_w)(name, level, info),
     }
@@ -198,7 +220,7 @@ unsafe extern "system" fn get_attrs_ex_w(name: PCWSTR, level: i32, info: *mut c_
 
 unsafe extern "system" fn get_attrs_ex_a(name: PCSTR, level: i32, info: *mut c_void) -> BOOL {
     let o = ORIG.get().unwrap_unchecked();
-    if let Some(p) = ansi_to_wide(name).and_then(|w| redirect(w.as_ptr())) {
+    if let Some(p) = ansi_to_wide(name).and_then(|w| attrs_target(w.as_ptr())) {
         return (o.attrs_ex_w)(p.as_ptr(), level, info);
     }
     (o.attrs_ex_a)(name, level, info)

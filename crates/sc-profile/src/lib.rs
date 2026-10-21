@@ -1,13 +1,14 @@
 //! Profile format and path rules shared by the launcher and the agent.
 //!
 //! A profile is a folder holding a server pack (`pack.json`, `resources\`,
-//! `files\`) as published by a server operator, plus the player's own
+//! `files\`, `patches\`) as published by a server operator, plus the player's own
 //! `local.json`, which pack updates never touch. [`Profile`] is the two merged.
 //!
 //! Everything here is plain string logic so it can be unit tested on Linux;
 //! paths are Windows-style strings because both consumers run under Windows/Wine.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt;
 use std::path::Path;
 
@@ -19,6 +20,9 @@ pub const LOCAL_FILE: &str = "local.json";
 pub const FILES_DIR: &str = "files";
 /// Folder inside a pack holding launcher artwork.
 pub const RESOURCES_DIR: &str = "resources";
+/// Folder inside a pack holding client patches: `<module>.patchset.toml`
+/// files (see the `sc-patch` crate) and native plugins.
+pub const PATCHES_DIR: &str = "patches";
 /// Environment variable sc-inject uses to tell the agent which profile is active.
 pub const PROFILE_ENV: &str = "SC_PROFILE";
 /// Log file the agent writes inside the profile folder.
@@ -50,9 +54,9 @@ pub struct Pack {
     pub game: Game,
     #[serde(default, skip_serializing_if = "Branding::is_empty")]
     pub branding: Branding,
-    /// Experimental: how client patches are applied is likely to change.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub patches: Vec<PatchDef>,
+    /// How the patchsets in `patches/` are applied. Experimental.
+    #[serde(default, skip_serializing_if = "Patches::is_default")]
+    pub patches: Patches,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub update: Option<Update>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -207,47 +211,65 @@ pub struct Local {
     /// Log every game path the agent sees (debugging only; can be large).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub trace_files: bool,
+    /// Patches turned on or off by the player: module -> patch id -> on.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub patches: HashMap<String, HashMap<String, bool>>,
 }
 
 /// A profile ready to launch: the pack with the player's settings applied.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Profile {
     pub name: String,
     pub server: Option<String>,
     pub local_server: bool,
     pub args: Vec<String>,
     pub trace_files: bool,
-    pub patches: Vec<PatchDef>,
+    pub patches: Patches,
+    /// The player's patch choices from `local.json`.
+    pub patch_choices: HashMap<String, HashMap<String, bool>>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+/// `patches` in `pack.json`: how the pack's patchsets and plugins are applied.
+/// The patchsets themselves are every `patches/*.patchset.toml` in the pack.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct PatchDef {
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub description: String,
-    /// Module the offset is relative to. Defaults to the game executable.
-    #[serde(default = "default_module")]
-    pub module: String,
-    /// Offset from the module base (RVA), e.g. `"0x1A2B3C"`.
-    pub offset: String,
-    /// Bytes expected at the offset before patching, hex (spaces allowed).
-    pub original: String,
-    /// Bytes to write, hex. Must be the same length as `original`.
-    pub patched: String,
+pub struct Patches {
+    #[serde(default)]
+    pub method: PatchMethod,
+    #[serde(default)]
+    pub on_error: OnError,
+    /// Native DLLs in `patches/` the agent loads into the game after
+    /// patching, for hooks a byte patch can't express.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plugins: Vec<String>,
 }
 
-fn default_module() -> String {
-    "game.exe".to_string()
+impl Patches {
+    fn is_default(&self) -> bool {
+        *self == Patches::default()
+    }
 }
 
-/// A validated patch ready to apply.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Patch {
-    pub description: String,
-    pub module: String,
-    pub offset: usize,
-    pub original: Vec<u8>,
-    pub patched: Vec<u8>,
+/// Where and when patches are applied. Only `inject` exists today; the
+/// format leaves room for others (for example writing a patched copy of the
+/// executable) without changing the patchsets.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PatchMethod {
+    /// The agent DLL patches the game in memory before it starts running.
+    #[default]
+    Inject,
+}
+
+/// What happens when a required patch doesn't match the game.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OnError {
+    /// Don't start the game.
+    #[default]
+    Exit,
+    /// Start it with whatever patches did apply.
+    Continue,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -316,7 +338,12 @@ impl Pack {
                 return err("download.sha256: expected a SHA-256 in hex".into());
             }
         }
-        self.patches.iter().try_for_each(|p| p.validate().map(drop))
+        for p in &self.patches.plugins {
+            if patches_rel(p).is_none_or(|rel| !rel.to_ascii_lowercase().ends_with(".dll")) {
+                return err(format!("patches.plugins {p:?}: must be a .dll inside patches/"));
+            }
+        }
+        Ok(())
     }
 }
 
@@ -337,7 +364,16 @@ pub fn parse_version(v: &str) -> Option<(u64, u64, u64)> {
 
 /// The path inside `resources/` a branding entry points at, with `/` separators.
 pub fn resource_rel(path: &str) -> Option<&str> {
-    let rel = path.strip_prefix(RESOURCES_DIR)?.strip_prefix('/')?;
+    rel_inside(RESOURCES_DIR, path)
+}
+
+/// The path inside `patches/` a plugin entry points at.
+pub fn patches_rel(path: &str) -> Option<&str> {
+    rel_inside(PATCHES_DIR, path)
+}
+
+fn rel_inside<'a>(dir: &str, path: &'a str) -> Option<&'a str> {
+    let rel = path.strip_prefix(dir)?.strip_prefix('/')?;
     let ok = !rel.is_empty()
         && !rel.contains(['\\', ':'])
         && rel.split('/').all(|part| !part.is_empty() && part != "." && part != "..");
@@ -383,6 +419,7 @@ impl Profile {
             args,
             trace_files: local.trace_files,
             patches: pack.patches.clone(),
+            patch_choices: local.patches.clone(),
         }
     }
 
@@ -412,11 +449,6 @@ impl Profile {
         out
     }
 
-    /// Validates every patch definition.
-    pub fn patches(&self) -> Result<Vec<Patch>, Error> {
-        self.patches.iter().map(PatchDef::validate).collect()
-    }
-
     /// Contents of the generated `address.cfg`, if a server is set.
     pub fn address_cfg(&self) -> Result<Option<String>, Error> {
         let Some(server) = &self.server else { return Ok(None) };
@@ -425,54 +457,17 @@ impl Profile {
     }
 }
 
-impl PatchDef {
-    pub fn validate(&self) -> Result<Patch, Error> {
-        let what = if self.description.is_empty() { &self.offset } else { &self.description };
-        let offset = parse_offset(&self.offset).map_err(|e| Error(format!("patch {what}: {e}")))?;
-        let original = parse_hex(&self.original).map_err(|e| Error(format!("patch {what}: original: {e}")))?;
-        let patched = parse_hex(&self.patched).map_err(|e| Error(format!("patch {what}: patched: {e}")))?;
-        if original.is_empty() || original.len() != patched.len() {
-            return Err(Error(format!(
-                "patch {what}: original and patched must be the same non-zero length ({} vs {})",
-                original.len(),
-                patched.len()
-            )));
-        }
-        if !is_plain_file_name(&self.module) {
-            return Err(Error(format!("patch {what}: module must be a file name, got {:?}", self.module)));
-        }
-        Ok(Patch {
-            description: self.description.clone(),
-            module: self.module.clone(),
-            offset,
-            original,
-            patched,
-        })
-    }
-}
-
-fn is_plain_file_name(s: &str) -> bool {
-    !s.is_empty() && !s.contains(['\\', '/', ':']) && s != "." && s != ".."
-}
-
-pub fn parse_offset(s: &str) -> Result<usize, String> {
-    let t = s.trim();
-    let (digits, radix) = match t.strip_prefix("0x").or_else(|| t.strip_prefix("0X")) {
-        Some(h) => (h, 16),
-        None => (t, 10),
-    };
-    usize::from_str_radix(&digits.replace('_', ""), radix).map_err(|_| format!("bad offset {s:?}"))
-}
-
-pub fn parse_hex(s: &str) -> Result<Vec<u8>, String> {
-    let digits: String = s.chars().filter(|c| !c.is_whitespace()).collect();
-    if !digits.len().is_multiple_of(2) {
-        return Err(format!("odd number of hex digits in {s:?}"));
-    }
-    (0..digits.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&digits[i..i + 2], 16).map_err(|_| format!("bad hex in {s:?}")))
-        .collect()
+/// The patchset files in a profile folder, sorted by name.
+pub fn patchset_files(profile_dir: &Path) -> Vec<std::path::PathBuf> {
+    let mut out: Vec<_> = std::fs::read_dir(profile_dir.join(PATCHES_DIR))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_file() && p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.to_ascii_lowercase().ends_with(".patchset.toml")))
+        .collect();
+    out.sort();
+    out
 }
 
 /// Turns an argument into a Windows path. Under Wine a Unix absolute path
@@ -580,16 +575,6 @@ mod tests {
         assert_eq!(profile_file(r"Z:\p\", r"data\a.cfg"), r"Z:\p\files\data\a.cfg");
     }
 
-    #[test]
-    fn hex_and_offsets() {
-        assert_eq!(parse_hex("90 90\tEB").unwrap(), vec![0x90, 0x90, 0xEB]);
-        assert!(parse_hex("909").is_err());
-        assert!(parse_hex("zz").is_err());
-        assert_eq!(parse_offset("0x1A_2B").unwrap(), 0x1A2B);
-        assert_eq!(parse_offset("42").unwrap(), 42);
-    }
-
-
     fn pack(json: &str) -> Pack {
         Pack::from_json(json).unwrap()
     }
@@ -603,7 +588,7 @@ mod tests {
               "$schema": "x", "format": 1, "id": "xyz.starfury.main", "name": "Starfury", "version": "1.2.0",
               "server": { "address": "starfury.xyz:3801" },
               "game": { "args": ["-a"] },
-              "patches": [{ "description": "nop a check", "offset": "0x1000", "original": "74 05", "patched": "90 90" }]
+              "patches": { "on_error": "continue", "plugins": ["patches/hooks.dll"] }
             }"#,
         );
         p.validate().unwrap();
@@ -611,16 +596,19 @@ mod tests {
         assert_eq!(plain.name, "Starfury");
         assert_eq!(plain.args(), vec!["-a"]);
         assert_eq!(plain.address_cfg().unwrap().unwrap(), "set net_masterServerAddress \"starfury.xyz:3801\"\r\n");
-        let patches = plain.patches().unwrap();
-        assert_eq!(patches[0].module, "game.exe");
-        assert_eq!(patches[0].offset, 0x1000);
+        assert_eq!(plain.patches.method, PatchMethod::Inject);
+        assert_eq!(plain.patches.on_error, OnError::Continue);
 
-        let local = Local::from_json(r#"{"name":"Mine","server":"","local_server":true,"args":["-b"],"trace_files":true}"#).unwrap();
+        let local = Local::from_json(
+            r#"{"name":"Mine","server":"","local_server":true,"args":["-b"],"trace_files":true,"patches":{"game.exe":{"x":false}}}"#,
+        )
+        .unwrap();
         let mine = Profile::new(&p, &local);
         assert_eq!(mine.name, "Mine");
         assert_eq!(mine.server, None);
         assert_eq!(mine.args(), vec!["-launchLocalServer", "-a", "-b"]);
         assert!(mine.trace_files);
+        assert_eq!(mine.patch_choices["game.exe"]["x"], false);
     }
 
     #[test]
@@ -646,8 +634,9 @@ mod tests {
         assert!(!bad(r#"{"branding":{"background":["resources/a.jpg","resources/b.jpg"]}}"#));
         assert!(bad(r#"{"branding":{"background":["resources/a.jpg","../b.jpg"]}}"#));
         assert!(bad(r#"{"requires":{"game":["abc"]}}"#));
-        assert!(bad(r#"{"patches":[{"offset":"0x10","original":"90","patched":"90 90"}]}"#));
-        assert!(bad(r#"{"patches":[{"module":"..\\x.dll","offset":"0x10","original":"90","patched":"91"}]}"#));
+        assert!(bad(r#"{"patches":{"plugins":["../x.dll"]}}"#));
+        assert!(bad(r#"{"patches":{"plugins":["patches/x.exe"]}}"#));
+        assert!(Pack::from_json(r#"{"format":1,"id":"a","name":"a","version":"1.0.0","patches":{"method":"bake"}}"#).is_err());
     }
 
     #[test]

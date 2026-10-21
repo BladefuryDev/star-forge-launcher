@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/sc-profile", "crates/sc-inject", "crates/sc-agent", "crates/sc-launch", "gui/src-tauri"]
+members = ["crates/sc-profile", "crates/sc-patch", "crates/sc-inject", "crates/sc-agent", "crates/sc-launch", "gui/src-tauri"]
 
 [workspace.package]
 version = "0.2.0"
@@ -9,6 +9,7 @@ license = "MIT"
 
 [workspace.dependencies]
 sc-profile = { path = "crates/sc-profile" }
+sc-patch = { path = "crates/sc-patch" }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 serde_json = "1"

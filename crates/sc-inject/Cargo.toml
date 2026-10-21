@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 sc-profile.workspace = true
+sc-patch.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true

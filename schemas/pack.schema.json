@@ -155,37 +155,31 @@
       }
     },
     "patches": {
-      "description": "Experimental: how client patches are applied will likely change. In-memory byte patches applied before the game runs; each is checked against the original bytes and skipped if they differ.",
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "offset",
-          "original",
-          "patched"
-        ],
-        "additionalProperties": false,
-        "properties": {
-          "description": {
-            "type": "string"
-          },
-          "module": {
-            "description": "File name of the module; defaults to game.exe.",
+      "description": "Experimental. How the patchsets in the pack's patches/ folder (every patches/<module>.patchset.toml, same format the STAR FORGE Patcher builds for servers) and native plugins are applied.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "description": "How patches are applied. \"inject\": the agent DLL patches the game in memory before it runs (the only method so far).",
+          "enum": [
+            "inject"
+          ],
+          "default": "inject"
+        },
+        "on_error": {
+          "description": "When a required patch doesn't match the installed game: \"exit\" refuses to start the game, \"continue\" starts it with whatever applied.",
+          "enum": [
+            "exit",
+            "continue"
+          ],
+          "default": "exit"
+        },
+        "plugins": {
+          "description": "Native DLLs in patches/ loaded into the game after patching, for hooks byte patches can't express. They may export int starforge_plugin_init(const PluginApi*). Players are warned that these run native code.",
+          "type": "array",
+          "items": {
             "type": "string",
-            "default": "game.exe"
-          },
-          "offset": {
-            "description": "Offset from the module base, e.g. \"0x1A2B3C\".",
-            "type": "string",
-            "pattern": "^(0[xX][0-9a-fA-F_]+|[0-9_]+)$"
-          },
-          "original": {
-            "description": "Hex bytes expected at the offset.",
-            "$ref": "#/$defs/hex"
-          },
-          "patched": {
-            "description": "Hex bytes to write; same length as original.",
-            "$ref": "#/$defs/hex"
+            "pattern": "^patches/[^\\\\]+\\.[dD][lL][lL]$"
           }
         }
       }
@@ -230,10 +224,6 @@
     "resource": {
       "type": "string",
       "pattern": "^resources/[^\\\\]+$"
-    },
-    "hex": {
-      "type": "string",
-      "pattern": "^\\s*([0-9a-fA-F]{2}\\s*)+$"
     }
   }
 }

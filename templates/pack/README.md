@@ -11,7 +11,8 @@ should look while your server is selected. Zip the folder to hand it out.
 my-server/
 ├── pack.json        what the pack is and how to launch it
 ├── resources/       launcher artwork: logo, icon, background
-└── files/           game file overlays, mirroring the game folder
+├── files/           game file overlays, mirroring the game folder
+└── patches/         client patches (optional, experimental)
 ```
 
 ## Making your pack
@@ -74,11 +75,12 @@ different game version get a warning:
 - **`.pak` files win.** The game prefers a file inside a `.pak` archive over a
   loose file at the same path, so you can replace a whole `.pak` but not a
   single file inside one.
-- **Patches are experimental.** How client patches are applied is likely to
-  change before format 1 settles. Each patch checks the original bytes first
-  and is skipped if they don't match, so a game update makes them inactive
-  rather than harmful. Check `agent.log` after an update.
-- **What a pack can contain.** Only `pack.json`, `resources/`, `files/` and
+- **Patches are experimental.** See [patches/README.md](patches/README.md).
+  Patchsets are tied to one `game.exe` build by its sha1 and every write
+  checks the original bytes, so after a game update they are refused rather
+  than misapplied. List the build in `requires.game` too, and check
+  `agent.log` after an update.
+- **What a pack can contain.** Only `pack.json`, `resources/`, `files/`, `patches/` and
   top-level README/LICENSE/CHANGELOG files are installed; anything else in
   the zip (including dotfiles) is ignored.
 - **Players are trusting you.** Overlays and patches change what the game

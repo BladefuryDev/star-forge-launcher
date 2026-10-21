@@ -3,7 +3,7 @@
 //! A profile is a folder under the profiles folder holding a server pack
 //! (`pack.json`, `resources/`, `files/`) and the player's `local.json`.
 
-use sc_profile::{Local, Pack, PatchDef, Profile, LOCAL_FILE, PACK_FILE};
+use sc_profile::{Local, Pack, Profile, LOCAL_FILE, PACK_FILE};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
@@ -172,7 +172,7 @@ struct Legacy {
     #[serde(default)]
     trace_files: bool,
     #[serde(default, rename = "patch")]
-    patches: Vec<PatchDef>,
+    patches: Vec<toml::Value>,
 }
 
 fn yes() -> bool {
@@ -188,13 +188,18 @@ fn migrate_legacy(dir: &Path) -> Result<(), String> {
     }
     let text = std::fs::read_to_string(&legacy_path).map_err(|e| format!("{}: {e}", legacy_path.display()))?;
     let old: Legacy = toml::from_str(&text).map_err(|e| format!("{LEGACY_FILE}: {e}"))?;
+    if !old.patches.is_empty() {
+        return Err(format!(
+            "{LEGACY_FILE} has [[patch]] entries, which this launcher no longer reads: move them to a \
+             patches/game.exe.patchset.toml (see templates/pack/patches/README.md) and remove them from {LEGACY_FILE}"
+        ));
+    }
     let folder = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let mut pack = Pack {
         format: sc_profile::PACK_FORMAT,
         id: format!("local.{}", slug(&folder)),
         name: if old.name.trim().is_empty() { folder } else { old.name },
         version: "1.0.0".into(),
-        patches: old.patches,
         ..Pack::default()
     };
     pack.server.address = old.server;
@@ -239,12 +244,13 @@ mod tests {
             "name = \"Old\"\nserver = \"a.b:1\"\ntrace_files = true\n[[patch]]\noffset = \"0x10\"\noriginal = \"90\"\npatched = \"91\"\n",
         )
         .unwrap();
+        assert!(load(&dir).unwrap_err().contains("patchset"), "old inline patches are not dropped silently");
+        std::fs::write(dir.join(LEGACY_FILE), "name = \"Old\"\nserver = \"a.b:1\"\ntrace_files = true\n").unwrap();
         let p = load(&dir).unwrap();
         assert_eq!(p.name, "Old");
         assert_eq!(p.server.as_deref(), Some("a.b:1"));
         assert!(p.local_server, "old default kept");
         assert!(p.trace_files);
-        assert_eq!(p.patches.len(), 1);
         assert!(dir.join("profile.toml.migrated").is_file());
         assert!(read_pack(&dir).unwrap().id.starts_with("local.sf-migrate-"));
         std::fs::remove_dir_all(&dir).unwrap();

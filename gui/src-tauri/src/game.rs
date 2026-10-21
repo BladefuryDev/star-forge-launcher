@@ -162,8 +162,11 @@ fn start_game(app: &AppHandle) -> Result<(), String> {
         return Err("Choose a server profile first.".into());
     }
     let dir = crate::profiles::profiles_dir()?.join(&selected);
-    profiles::load(&dir)?;
+    let profile = profiles::load(&dir)?;
     if let Some(warning) = profiles::read_pack(&dir).ok().and_then(|p| sc_launch::packs::game_build_warning(&p, &setup.game_exe())) {
+        notify(app, warning, NotificationLevel::Info);
+    }
+    for warning in sc_launch::patching::preflight(&dir, &profile, &setup.game_exe())? {
         notify(app, warning, NotificationLevel::Info);
     }
     let mut cmd = launch::command(&setup, &dir, &[])?;

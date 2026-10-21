@@ -22,6 +22,7 @@ function parseReview(item) {
     localServer: boolean(value.localServer),
     args: array(value.args, string),
     patches: number(value.patches, 0, 100000),
+    plugins: number(value.plugins, 0, 1000),
     fileCount: number(value.fileCount, 0, Number.MAX_SAFE_INTEGER),
     files: array(value.files, string),
     warnings: array(value.warnings, string),
@@ -69,6 +70,7 @@ function renderReview(review) {
   fact('Replaces game files', files);
   if (review.patches || review.update?.patches)
     fact('Game patches', review.update ? `${review.update.patches} → ${review.patches}` : String(review.patches));
+  if (review.plugins) fact('Native plugins', `${review.plugins} (run their own code in the game)`);
   if (review.args.length) fact('Game arguments', review.args.join(' '));
   if (review.managed) fact('Updates', 'Checked automatically from the server');
   parts.push(facts);
