@@ -15,6 +15,7 @@ export function parsePreferences(input) {
     closeBehavior: choice(value.closeBehavior, ['tray', 'exit']),
     gameDirectory: string(value.gameDirectory),
     protonPath: string(value.protonPath),
+    checkUpdates: boolean(value.checkUpdates),
   };
 }
 /** @typedef {ReturnType<typeof parsePreferences>} Preferences */

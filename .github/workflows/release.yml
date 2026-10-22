@@ -71,6 +71,11 @@ jobs:
           [ "$want" = "$have" ] || { echo "tag $GITHUB_REF_NAME but tauri.conf.json says $have"; exit 1; }
       - name: Build launcher packages
         working-directory: gui/src-tauri
+        # Signs the self-update files (*.sig); the public half is
+        # plugins.updater.pubkey in tauri.conf.json.
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npx --yes @tauri-apps/cli@2 build --ci --config tauri.release.conf.json
       - name: Build sc-launch (Linux CLI)
         if: runner.os == 'Linux'
@@ -82,15 +87,19 @@ jobs:
           version=$(node -p "require('./gui/src-tauri/tauri.conf.json').version")
           mkdir -p out cli
           cp dist/tools/sc-inject.exe dist/tools/sc_agent.dll cli/
+          shopt -s nullglob
           if [ "$RUNNER_OS" = Linux ]; then
-            cp target/release/bundle/deb/*.deb target/release/bundle/rpm/*.rpm target/release/bundle/appimage/*.AppImage out/
+            cp target/release/bundle/deb/*.deb* target/release/bundle/rpm/*.rpm* target/release/bundle/appimage/*.AppImage* out/
             cp target/release/sc-launch cli/
             tar -czf "out/sc-launch_${version}_linux_x64.tar.gz" -C cli .
           else
-            cp target/release/bundle/msi/*.msi target/release/bundle/nsis/*.exe out/
+            cp target/release/bundle/msi/*.msi* target/release/bundle/nsis/*.exe* out/
             cp dist/tools/sc-launch.exe cli/
             (cd cli && 7z a "../out/sc-launch_${version}_windows_x64.zip" . >/dev/null)
           fi
+          # GitHub turns spaces in asset names into dots; do it here so the
+          # links in latest.json match.
+          for f in out/*\ *; do mv "$f" "${f// /.}"; done
           ls -l out
       - uses: actions/upload-artifact@v4
         with:
@@ -109,6 +118,32 @@ jobs:
           pattern: packages-*
           path: out
           merge-multiple: true
+      # The launcher's updater reads releases/latest/download/latest.json, so
+      # it sees a version once its release is published (not while a draft).
+      - name: Write latest.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME"
+          platforms='{}'
+          for sig in out/*.sig; do
+            file=$(basename "${sig%.sig}")
+            case "$file" in
+              *.AppImage) key=linux-x86_64-appimage ;;
+              *.deb) key=linux-x86_64-deb ;;
+              *.rpm) key=linux-x86_64-rpm ;;
+              *-setup.exe) key=windows-x86_64-nsis ;;
+              *.msi) key=windows-x86_64-msi ;;
+              *) continue ;;
+            esac
+            platforms=$(jq --arg k "$key" --arg url "$base/$file" --rawfile sig "$sig" \
+              '. + {($k): {url: $url, signature: ($sig | rtrimstr("\n"))}}' <<<"$platforms")
+          done
+          [ "$platforms" != '{}' ] || { echo "no update signatures: are the TAURI_SIGNING_PRIVATE_KEY secrets set?"; exit 1; }
+          jq -n --arg v "${GITHUB_REF_NAME#v}" --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg page "https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME" \
+            --argjson p "$platforms" '{version: $v, pub_date: $date, page: $page, platforms: $p}' > out/latest.json
+          cat out/latest.json
       - uses: softprops/action-gh-release@v2
         with:
           draft: true

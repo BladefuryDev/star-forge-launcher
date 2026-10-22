@@ -5,6 +5,7 @@ mod game;
 mod lifecycle;
 mod prefs;
 mod profiles;
+mod updater;
 
 use std::ffi::OsStr;
 use tauri::{Emitter, Manager};
@@ -99,6 +100,7 @@ fn main() {
         .manage(prefs::PrefsState::default())
         .manage(game::GameState::default())
         .manage(profiles::PackReviews::default())
+        .manage(updater::UpdaterState::default())
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             lifecycle::restore(app);
         }))
@@ -115,6 +117,7 @@ fn main() {
                 .build(),
         )
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             prefs::load(app.handle());
             lifecycle::create_windows(app.handle())?;
@@ -176,6 +179,9 @@ fn main() {
                 profiles::check_pack_updates,
                 profiles::take_pending_link,
                 profiles::get_profile_branding,
+                updater::check_launcher_update,
+                updater::install_launcher_update,
+                updater::open_launcher_release,
                 app_version,
             ];
             handler(invoke)

@@ -49,6 +49,8 @@ pub struct Preferences {
     pub game_directory: String,
     /// Proton build folder (Linux); empty = the one that last ran the game.
     pub proton_path: String,
+    /// Look for a new launcher version at startup.
+    pub check_updates: bool,
 }
 
 impl Default for Preferences {
@@ -62,6 +64,7 @@ impl Default for Preferences {
             background_folder: String::new(),
             game_directory: String::new(),
             proton_path: String::new(),
+            check_updates: true,
         }
     }
 }

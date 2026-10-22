@@ -8,6 +8,7 @@ import { bindProfiles } from './profiles.js';
 import { bindPacks } from './packs.js';
 import { bindArtwork } from './artwork.js';
 import { bindBranding } from './branding.js';
+import { bindUpdater } from './updater.js';
 import { startupStep, showStartupFailure } from './startup.js';
 import { control, required, notice, run } from './ui.js';
 
@@ -90,6 +91,12 @@ async function start() {
       }),
     );
     run(() => bindArtwork(preferences));
+    run(() =>
+      bindUpdater(preferences, () => {
+        const phase = store.getSnapshot()?.phase;
+        return phase === 'launching' || phase === 'running';
+      }),
+    );
     run(() => invoke('initialize_launcher'));
   } catch (error) {
     store.dispose();

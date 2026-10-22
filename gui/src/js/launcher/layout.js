@@ -35,6 +35,7 @@ export function mountLayout() {
             <div class="setting-buttons"><button class="button" id="summary-edit">Edit profile</button><button class="button" id="summary-folder">Open profile folder</button></div>
           </div>
         </section>
+        <div id="launcher-update" class="update-row" hidden><span id="launcher-update-text"></span><span class="spacer"></span><button class="button" id="launcher-update-notes" hidden>Release notes</button><button class="button primary" id="launcher-update-install">Update and restart</button></div>
       </div>
       <div id="notices" class="notices" aria-live="polite" aria-relevant="additions"></div>
       <footer class="launch-dock" hidden>

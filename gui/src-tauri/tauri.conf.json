@@ -63,6 +63,15 @@
           "starforge"
         ]
       }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY5OEY4NUE4NjFFMTJGQUIKUldTckwrRmhxSVdQK2NKaTQ2Y0c5T2U0UGc2MTU4V3JIS2kyVlNlWnJCNXlnMkF2RWZteEhZVGYK",
+      "endpoints": [
+        "https://github.com/starfury-xyz/star-forge-launcher/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

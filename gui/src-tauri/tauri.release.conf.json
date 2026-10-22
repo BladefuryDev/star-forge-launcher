@@ -4,6 +4,7 @@
     "resources": {
       "../../dist/tools/sc-inject.exe": "tools/sc-inject.exe",
       "../../dist/tools/sc_agent.dll": "tools/sc_agent.dll"
-    }
+    },
+    "createUpdaterArtifacts": true
   }
 }

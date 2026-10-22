@@ -81,6 +81,11 @@ fn phase(app: &AppHandle) -> Phase {
     app.state::<GameState>().0.lock().unwrap().phase.unwrap_or(Phase::Checking)
 }
 
+/// The game is starting or running.
+pub fn busy(app: &AppHandle) -> bool {
+    matches!(phase(app), Phase::Launching | Phase::Running)
+}
+
 /// Where sc-inject.exe and sc_agent.dll are: `STAR_FORGE_TOOLS_DIR`, bundled
 /// resources, next to this program, or (development builds only) the repo's
 /// dist folder.
@@ -120,7 +125,7 @@ fn options(app: &AppHandle) -> launch::Options {
 
 /// Re-detects the game and Proton in the background.
 pub fn refresh(app: &AppHandle) {
-    if matches!(phase(app), Phase::Launching | Phase::Running) {
+    if busy(app) {
         return;
     }
     update(app, |s| {

@@ -796,6 +796,15 @@ dialog footer {
   background: #2a1f12;
   font-size: 13px;
 }
+/* Bottom of the content, clear of the notices along the top. */
+.content-area > .update-row {
+  position: sticky;
+  bottom: 0;
+  margin: 18px 0 0;
+}
+.update-row .spacer {
+  flex: 1;
+}
 .summary-links {
   margin-bottom: 10px;
 }

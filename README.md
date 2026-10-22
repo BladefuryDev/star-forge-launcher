@@ -43,6 +43,11 @@ Download the latest build from the
 | Windows | `.msi` or `-setup.exe` |
 | Linux | `.AppImage` (any distro), `.deb` or `.rpm` |
 
+The launcher updates itself from here: it checks at startup (can be turned off
+in Settings) and offers to install a new version and restart. The AppImage
+must be somewhere you can write to (Gear Lever's `~/AppImages` is fine); `.deb` and
+`.rpm` updates ask for your password.
+
 Star Conflict must be installed through Steam. The launcher finds it in your
 Steam libraries automatically; on Linux it needs to have been started from Steam
 once so its Proton prefix exists.
@@ -164,6 +169,17 @@ Push a tag like `v0.2.0` (matching the version in `Cargo.toml` and
 `gui/src-tauri/tauri.conf.json`). GitHub Actions builds the Windows and Linux
 packages and attaches them to a draft release for review before publishing.
 
+The packages are signed for the launcher's self-update, so the repository
+needs two secrets: `TAURI_SIGNING_PRIVATE_KEY` (the key file's contents) and
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Make a key pair with
+`npx @tauri-apps/cli signer generate -w ~/.tauri/star-forge-updater.key`; its
+public half is `plugins.updater.pubkey` in `tauri.conf.json`. Keep the private
+key and password safe: installed launchers only accept updates signed with it.
+The release also carries a `latest.json`, which installed launchers find at
+`releases/latest/download/latest.json` once the release is published (drafts
+are invisible to them). A fork that publishes its own builds needs its own key
+pair and its own `plugins.updater.endpoints`.
+
 ## Goals and to-do
 
 **Profiles for everyone**
@@ -190,7 +206,7 @@ packages and attaches them to a draft release for review before publishing.
 **Launcher**
 - [x] STAR FORGE's own logo, icon and default theme (v1)
 - [ ] Server status on the play screen (online / player count)
-- [ ] Launcher self-update via GitHub releases
+- [x] Launcher self-update via GitHub releases (signed; AppImage, deb, rpm, NSIS, MSI)
 - [ ] Settings for the theme label ("Faction colour") now that themes go beyond factions
 - [ ] macOS support (Proton/Wine path)
 
