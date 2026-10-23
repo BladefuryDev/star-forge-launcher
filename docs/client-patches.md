@@ -93,7 +93,11 @@ profile folder.
 
 - Patchsets are tied to one `game.exe` build by its sha1; list that build in
   `requires.game` too, and check `agent.log` after a game update.
-- `files/` can't replace a single file inside a `.pak` archive on its own: the
-  engine prefers packed files. A client patch can change that preference
-  (tested, not yet published); a shared library of such core patches that
-  packs switch on by name is planned.
+- `files/` can't replace a single file inside a `.pak` archive on its own: when
+  the engine builds its file table it keeps the packed copy of a duplicate
+  path. A small `game.exe` patch, *loose-before-packed*, makes it keep the
+  loose copy instead, so a pack can override single packed files such as
+  `data/strings/<language>/string.txt`. Like every client patch it exists
+  only in memory while that profile's game runs, and a stock install has no
+  duplicates, so without override files nothing changes. It will be the first
+  entry in a shared library of core patches that packs switch on by name.
