@@ -165,8 +165,9 @@ sc-launch update <profile>           # install the newest version of a profile's
 
 ## Releasing
 
-Push a tag like `v0.2.0` (matching the version in `Cargo.toml` and
-`gui/src-tauri/tauri.conf.json`). GitHub Actions builds the Windows and Linux
+Rename the **Unreleased** section of [CHANGELOG.md](CHANGELOG.md) to the new
+version, then push a tag like `v0.2.0` (matching the version in `Cargo.toml`
+and `gui/src-tauri/tauri.conf.json`). That section becomes the release notes. GitHub Actions builds the Windows and Linux
 packages and attaches them to a draft release for review before publishing.
 
 The packages are signed for the launcher's self-update, so the repository
