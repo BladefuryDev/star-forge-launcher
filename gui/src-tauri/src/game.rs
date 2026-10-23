@@ -171,9 +171,19 @@ fn start_game(app: &AppHandle) -> Result<(), String> {
     if let Some(warning) = profiles::read_pack(&dir).ok().and_then(|p| sc_launch::packs::game_build_warning(&p, &setup.game_exe())) {
         notify(app, warning, NotificationLevel::Info);
     }
+    let trust = sc_launch::packs::verify_installed(&dir)?;
+    let pack = profiles::read_pack(&dir)?;
+    if let Some(warning) = sc_launch::packs::launch_check(&pack)? {
+        notify(app, warning, NotificationLevel::Info);
+    }
+    if let Some(note) = sc_launch::remote::launch_sync(&dir, &pack, trust.key().as_ref())? {
+        notify(app, note, NotificationLevel::Info);
+    }
     for warning in sc_launch::patching::preflight(&dir, &profile, &setup.game_exe())? {
         notify(app, warning, NotificationLevel::Info);
     }
+    let shared = sc_launch::state::shared_local_appdata(&setup);
+    sc_launch::state::sync_shared(&dir, &profile, shared.as_deref())?;
     let mut cmd = launch::command(&setup, &dir, &[])?;
 
     // Proton and the injector are chatty; keep their output for troubleshooting.
@@ -214,10 +224,18 @@ fn start_game(app: &AppHandle) -> Result<(), String> {
     let app = app.clone();
     std::thread::spawn(move || {
         let status = child.wait();
+        if let Err(e) = sc_launch::state::sync_shared(&dir, &profile, shared.as_deref()) {
+            notify(&app, format!("Could not save your game settings for other profiles: {e}"), NotificationLevel::Error);
+        }
         update(&app, |s| s.phase = Some(Phase::Ready));
         match status {
             Ok(s) if s.success() => {}
-            Ok(s) => eprintln!("game exited with {s}"),
+            Ok(s) => {
+                eprintln!("game exited with {s}");
+                if let Some(e) = launch::inject_error(&dir) {
+                    notify(&app, format!("The game did not start: {e}"), NotificationLevel::Error);
+                }
+            }
             Err(e) => eprintln!("could not wait for the game: {e}"),
         }
         if prefs::get(&app).launch_behavior == LaunchBehavior::Tray {
@@ -251,10 +269,14 @@ pub fn perform_launcher_action(app: AppHandle, action: String) -> Result<(), Str
         }
         ("launch", Phase::Ready) => {
             update(&app, |s| s.phase = Some(Phase::Launching));
-            start_game(&app).inspect_err(|e| {
-                update(&app, |s| s.phase = Some(Phase::Ready));
-                notify(&app, e.clone(), NotificationLevel::Error);
-            })
+            // Off the main thread: checks hash the pack and may ask its server.
+            std::thread::spawn(move || {
+                if let Err(e) = start_game(&app) {
+                    update(&app, |s| s.phase = Some(Phase::Ready));
+                    notify(&app, e, NotificationLevel::Error);
+                }
+            });
+            Ok(())
         }
         _ => Err("This action is not available right now.".into()),
     }

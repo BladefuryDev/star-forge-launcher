@@ -923,6 +923,17 @@ dialog footer {
   display: flex;
   gap: 8px;
 }
+.sample-packs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.sample-packs span {
+  color: var(--muted);
+  font-size: 12px;
+  margin-right: 4px;
+}
 .pack-import-row input {
   flex: 1;
   min-width: 0;

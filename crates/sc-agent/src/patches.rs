@@ -1,5 +1,6 @@
-//! The `inject` patch method: applies the profile's patchsets to the game's
-//! memory and loads its native plugins, all before the game's own code runs.
+//! The `inject` patch method: applies the core patches the pack asks for, then
+//! the pack's own patchsets, to the game's memory and loads its native
+//! plugins, all before the game's own code runs.
 //!
 //! A patchset for game.exe is applied at once (the process is still
 //! suspended). One for a DLL that isn't loaded yet is applied the moment the
@@ -163,12 +164,18 @@ fn failed(on_error: OnError, msg: &str) -> bool {
 pub fn apply_all(profile_dir: &str, profile: &Profile) -> bool {
     let on_error = profile.patches.on_error;
     let mut later = Vec::new();
-    for file in sc_profile::patchset_files(Path::new(profile_dir)) {
+    let core: Vec<Result<Patchset, String>> = match sc_patch::core::sets(&profile.patches.core) {
+        Ok(sets) => sets.into_iter().map(Ok).collect(),
+        Err(e) => vec![Err(e)],
+    };
+    let pack_sets = sc_profile::patchset_files(Path::new(profile_dir)).into_iter().map(|file| {
         let name = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        let set = match std::fs::read_to_string(&file)
+        std::fs::read_to_string(&file)
             .map_err(|e| e.to_string())
             .and_then(|t| Patchset::parse(&t, &name).map_err(|e| e.to_string()))
-        {
+    });
+    for set in core.into_iter().chain(pack_sets) {
+        let set = match set {
             Ok(set) => set,
             Err(e) => {
                 if !failed(on_error, &e) {

@@ -3,10 +3,14 @@
 //! On load it reads the active profile (from `SC_PROFILE`), applies the
 //! pack's patchsets and plugins (the `inject` patch method), and hooks the Win32 file API so
 //! any game file that also exists under `<profile>\files\` is opened from the
-//! profile instead. The Steam install on disk is never modified.
+//! profile instead. The Steam install on disk is never modified. Unless the
+//! player chose otherwise, the game's per-user data folder is the profile's
+//! own too (see `folders`).
 
 #[cfg(windows)]
 mod agent;
+#[cfg(windows)]
+mod folders;
 #[cfg(windows)]
 mod hooks;
 #[cfg(windows)]

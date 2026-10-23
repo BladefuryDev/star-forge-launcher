@@ -10,176 +10,52 @@ STAR FORGE is built by the [STARFURY](https://starfury.xyz) community (an
 unofficial Star Conflict server), but it is meant for anyone running or playing
 on a Star Conflict server project.
 
-> **Status:** early development (0.1). It works for day-to-day play on Linux
+> **Status:** early development (0.2). It works for day-to-day play on Linux
 > (Proton) and Windows, but expect rough edges.
 
 ## Features
 
-- **Server packs** – a server hands out one zip or link with its address,
-  game files and look; the launcher shows what it changes before installing,
-  verifies downloads and offers updates. One-click installs through
-  `starforge://` links.
-- **Server profiles** – name, master server address (`host:port`), optional
-  local server, extra game arguments.
-- **File overlays** – put files in a profile's `files/` folder and the game
-  reads them instead of the originals, without touching the install.
-- **Client patches** (experimental) – patchsets in the same format as the
-  server patcher, applied to the game's memory before it runs. Every write
-  checks the original bytes, and the launcher checks the whole set against
-  your `game.exe` before starting, so a game update can't land a patch on
-  the wrong code. Packs can also ship native plugins for hooks.
-- **Linux and Windows** – on Linux the game runs through the same Proton build
-  and prefix Steam uses, so your settings carry over; the Steam overlay works.
-- **Desktop launcher** with themes (STAR FORGE, STARFURY, Empire, Federation, Jericho),
-  tray support and a command-line tool (`sc-launch`) for scripting.
+- **Server packs**: a server hands out one link (or zip) with its address,
+  game files and look. The launcher shows what a pack changes before
+  installing it, and keeps it updated. Ready-made profiles for community
+  servers are one click away.
+- **Nothing touches your install**: a profile's files are redirected in while
+  the game runs, so servers that change the same files never clash, and each
+  profile keeps its own game data (store cache, notes, local server database).
+- **Signed packs**: server teams sign their packs; the launcher remembers each
+  pack's key and refuses updates from anyone else.
+- **File lists**: servers can host their game files as a list (STAR FORGE or
+  the SCMOD1 format other launchers use) and players download only what
+  changed.
+- **Client patches** (experimental): byte patches applied to the game's memory
+  before it runs, checked against your `game.exe`, plus native plugins. Core
+  patches ship with the launcher, such as letting packs replace single files
+  inside `.pak` archives.
+- **Linux and Windows**: on Linux the game runs through the Proton build and
+  prefix Steam uses, with the Steam overlay. The launcher updates itself.
+- **Command line**: `sc-launch` for scripts and for server teams' tooling.
 
-## Installing
+## Get started
 
-Download the latest build from the
-[Releases page](https://github.com/starfury-xyz/star-forge-launcher/releases):
+Download the launcher from the
+[Releases page](https://github.com/starfury-xyz/star-forge-launcher/releases)
+(Windows `-setup.exe` or `.msi`; Linux `.AppImage`, `.deb` or `.rpm`), start
+it, and add a server under **Add profile**. Star Conflict must be installed
+through Steam.
 
-| Platform | File |
-|---|---|
-| Windows | `.msi` or `-setup.exe` |
-| Linux | `.AppImage` (any distro), `.deb` or `.rpm` |
+## Documentation
 
-The launcher updates itself from here: it checks at startup (can be turned off
-in Settings) and offers to install a new version and restart. The AppImage
-must be somewhere you can write to (Gear Lever's `~/AppImages` is fine); `.deb` and
-`.rpm` updates ask for your password.
+- [Getting started](docs/getting-started.md): installing, adding servers,
+  updates, troubleshooting.
+- [Making a server pack](docs/making-a-pack.md): for server teams; start from
+  [`templates/pack`](templates/pack) or the [`samples/`](samples/README.md).
+- [Pack format](docs/pack-format.md), [File lists](docs/file-lists.md),
+  [Signing and trust](docs/signing-and-trust.md),
+  [Client patches](docs/client-patches.md),
+  [Command line](docs/command-line.md), [How it works](docs/how-it-works.md).
+- [Development](docs/development.md): building, repository layout, releases.
 
-Star Conflict must be installed through Steam. The launcher finds it in your
-Steam libraries automatically; on Linux it needs to have been started from Steam
-once so its Proton prefix exists.
-
-## How it works
-
-```
-STAR FORGE Launcher ──▶ sc-inject.exe ──▶ game.exe (started suspended)
-                                            └─ sc_agent.dll
-                                                 ├─ redirects file reads to <profile>/files/
-                                                 └─ applies the profile's byte patches
-```
-
-`sc-inject.exe` starts the game suspended, loads `sc_agent.dll` into it and
-resumes it. The agent hooks the game's file access so that any file present in
-the profile's `files/` folder (mirroring the game folder, e.g.
-`files/data/address.cfg`) is used instead of the original. On Linux both run
-inside Proton.
-
-One limitation comes from the game itself: a file packed inside a `.pak`
-archive always wins over a loose file with the same path, so an overlay can
-replace a whole `.pak` but not a single file inside one.
-
-## Server profiles and packs
-
-Every profile is a *server pack*: the same format whether a server operator
-published it or you made it yourself in the launcher. Profiles live in the
-launcher's data folder:
-
-| Platform | Folder |
-|---|---|
-| Linux | `~/.local/share/star-forge/profiles/` |
-| Windows | `%APPDATA%\star-forge\profiles\` |
-
-```
-profiles/my-server/
-├── pack.json     the pack: name, server, branding, patches (replaced by updates)
-├── resources/    the pack's artwork
-├── files/        replacement game files, mirroring the game folder
-├── patches/      client patchsets (game.exe.patchset.toml) and plugins
-├── local.json    your own changes on top of the pack (never touched by updates)
-└── agent.log     what the agent redirected and patched last launch
-```
-
-To make a pack for your server, start from
-[`templates/pack`](templates/pack/README.md); the format is documented in
-[`schemas/pack.schema.json`](schemas/pack.schema.json), which editors use for
-autocomplete. Profiles from before 0.2 (`profile.toml`) are converted
-automatically.
-
-## Building from source
-
-Requirements:
-
-- [Rust](https://rustup.rs) (stable)
-- [cargo-xwin](https://github.com/rust-cross/cargo-xwin) on Linux, to
-  cross-build the Windows injector and agent
-  (`cargo install cargo-xwin`, `rustup target add x86_64-pc-windows-msvc`)
-- [Tauri CLI](https://v2.tauri.app/reference/cli/) for packaged builds
-  (`cargo install tauri-cli --version "^2"`)
-- Linux system libraries for Tauri, e.g. on Debian/Ubuntu:
-  `libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev`
-
-```sh
-scripts/build.sh               # injector, agent and sc-launch into dist/linux and dist/windows
-cargo build -p star-forge      # desktop launcher (development build)
-./target/debug/star-forge      # run it; it finds the tools in dist/ automatically
-cargo test --workspace         # unit tests
-```
-
-On Linux Wayland desktops the taskbar only shows the launcher's icon if a
-desktop entry is installed. Packages do this for you; for a local build run
-`scripts/install-desktop-entry.sh`.
-
-### Local configuration (`.env`)
-
-Paths that differ per machine can be set through `STAR_FORGE_*` variables.
-Copy `.env.example` to `.env` (it is gitignored) and uncomment what you need;
-development builds and the scripts read it automatically:
-
-| Variable | Overrides |
-|---|---|
-| `STAR_FORGE_GAME_DIR` | Star Conflict install folder (also the patcher's default `cloud/` for tests) |
-| `STAR_FORGE_TOOLS_DIR` | folder with `sc-inject.exe` and `sc_agent.dll` |
-| `STAR_FORGE_PROTON` | Proton build (Linux) |
-| `STAR_FORGE_DATA_DIR` | launcher data folder (preferences, profiles, log) |
-| `STAR_FORGE_BIN` | binary that `install-desktop-entry.sh` registers |
-
-Order of precedence: launcher settings / command-line flags, then these
-variables, then auto-detection.
-
-### Command line
-
-```sh
-sc-launch list                       # list profiles
-sc-launch info                       # show the detected game, tools and Proton
-sc-launch run <profile> [-- args]    # start the game with a profile
-sc-launch install <zip|folder|url>   # install or update a server pack
-sc-launch updates                    # check installed packs for new versions
-sc-launch update <profile>           # install the newest version of a profile's pack
-```
-
-### Repository layout
-
-| Path | What |
-|---|---|
-| `crates/sc-profile` | profile format and path mapping shared by everything |
-| `crates/sc-patch` | patchset format, checking and applying (shared by the agent and the launcher; same format as `patcher/`) |
-| `crates/sc-agent` | `sc_agent.dll`, the injected agent (file redirection, patches) |
-| `crates/sc-inject` | `sc-inject.exe`, starts the game and injects the agent |
-| `crates/sc-launch` | finds Steam, the game and Proton; profile storage; the `sc-launch` CLI |
-| `gui/` | the Tauri desktop launcher (`gui/src` web UI, `gui/src-tauri` Rust side) |
-| `patcher/` | server patcher (C++): applies a server's source-controlled patches to the `cloud/` exes in memory at startup, via a proxy DLL. Built separately with `make`; see [patcher/README.md](patcher/README.md) |
-| `scripts/` | build and desktop-integration scripts |
-
-## Releasing
-
-Rename the **Unreleased** section of [CHANGELOG.md](CHANGELOG.md) to the new
-version, then push a tag like `v0.2.0` (matching the version in `Cargo.toml`
-and `gui/src-tauri/tauri.conf.json`). That section becomes the release notes. GitHub Actions builds the Windows and Linux
-packages and attaches them to a draft release for review before publishing.
-
-The packages are signed for the launcher's self-update, so the repository
-needs two secrets: `TAURI_SIGNING_PRIVATE_KEY` (the key file's contents) and
-`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Make a key pair with
-`npx @tauri-apps/cli signer generate -w ~/.tauri/star-forge-updater.key`; its
-public half is `plugins.updater.pubkey` in `tauri.conf.json`. Keep the private
-key and password safe: installed launchers only accept updates signed with it.
-The release also carries a `latest.json`, which installed launchers find at
-`releases/latest/download/latest.json` once the release is published (drafts
-are invisible to them). A fork that publishes its own builds needs its own key
-pair and its own `plugins.updater.endpoints`.
+Everything is indexed in [docs/](docs/README.md).
 
 ## Goals and to-do
 
@@ -197,12 +73,21 @@ pair and its own `plugins.updater.endpoints`.
       checked against `game.exe` before launch, plus native plugins
 - [ ] `sfp build` for x64 sources (today client patchsets are written resolved)
 - [ ] x64 midhooks in the agent (C++-style hooks without a plugin)
-- [ ] Let `files/` override members of `.pak` archives (the engine prefers
-      packed files over loose ones; needs a VFS hook)
+- [x] Let `files/` override members of `.pak` archives (`loose-before-packed`
+      core patch)
 - [ ] Settle on patch methods beyond `inject` if needed
 - [ ] Export a profile as a pack zip from the launcher
 - [ ] Profile editor for patches and extra arguments in the UI
-- [ ] Pack signing, so players can tell a pack really comes from its server
+- [x] Pack signing: ed25519-signed manifests, key pinned per pack id on first
+      install, pack code re-checked before every launch; `sc-launch pack
+      keygen|sign|check` for server teams
+- [x] Each profile keeps its own game data (store cache, notes, local server
+      database); graphics settings and key bindings stay shared
+- [x] Servers can require a minimum pack version before players launch
+- [ ] Known publishers: ship server teams' keys with the launcher
+- [x] Core patches that ship with the launcher and packs switch on by id
+- [x] Packs can take their game files from a published file list (STAR FORGE
+      JSON or SCMOD1), downloading only what changed
 
 **Launcher**
 - [x] STAR FORGE's own logo, icon and default theme (v1)
@@ -216,7 +101,8 @@ pair and its own `plugins.updater.endpoints`.
 - [x] CI tests on Linux and Windows; tagged releases with packaged builds
 - [ ] `cargo fmt` the codebase and enforce it (plus clippy) in CI
 - [ ] Code signing for Windows builds
-- [ ] Contributor guide and a guide for server operators
+- [x] Guides for players and server teams ([docs/](docs/README.md))
+- [ ] Contributor guide
 
 ## Disclaimer
 

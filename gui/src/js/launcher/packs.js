@@ -17,6 +17,10 @@ function parseReview(item) {
     authors: array(value.authors, string),
     origin: string(value.origin),
     verified: boolean(value.verified),
+    signer: text(value.signer),
+    publisher: text(value.publisher),
+    newKey: boolean(value.newKey),
+    runsCode: boolean(value.runsCode),
     managed: boolean(value.managed),
     server: text(value.server),
     localServer: boolean(value.localServer),
@@ -25,6 +29,8 @@ function parseReview(item) {
     plugins: number(value.plugins, 0, 1000),
     fileCount: number(value.fileCount, 0, Number.MAX_SAFE_INTEGER),
     files: array(value.files, string),
+    filesHost: text(value.filesHost),
+    downloadBytes: value.downloadBytes === null ? null : number(value.downloadBytes, 0, Number.MAX_SAFE_INTEGER),
     warnings: array(value.warnings, string),
     update: update && {
       profile: string(update.profile),
@@ -62,11 +68,25 @@ function renderReview(review) {
   if (review.authors.length) fact('By', review.authors.join(', '));
   fact('From', review.origin);
   fact('Download', review.verified ? 'Checked against the published checksum' : 'Not checked (no published checksum)');
+  fact(
+    'Signature',
+    !review.signer
+      ? 'Not signed'
+      : review.publisher
+        ? `${brand(review.publisher)} (key ${review.signer})`
+        : review.newKey
+          ? `Key ${review.signer}, new: updates must be signed with it from now on`
+          : `Key ${review.signer}, same as the installed version`,
+  );
   const server = brand(review.server || 'Game default');
   fact('Server', review.update && review.update.server !== review.server ? `${brand(review.update.server || 'Game default')} → ${server}` : server);
   fact('Starts', review.localServer ? 'Game and local server' : 'Game only');
   let files = `${review.fileCount} file${review.fileCount === 1 ? '' : 's'}`;
   if (review.update) files += ` (${review.update.filesAdded} new, ${review.update.filesRemoved} removed)`;
+  if (review.filesHost) {
+    files += `, downloaded from ${review.filesHost}`;
+    if (review.downloadBytes !== null) files += ` (${(review.downloadBytes / 1048576).toFixed(1)} MB)`;
+  }
   fact('Replaces game files', files);
   if (review.patches || review.update?.patches)
     fact('Game patches', review.update ? `${review.update.patches} → ${review.patches}` : String(review.patches));
@@ -92,7 +112,13 @@ function renderReview(review) {
     parts.push(list);
   }
   parts.push(
-    el('p', 'pack-trust', 'Packs change the files the game loads. Only install packs from servers you trust.'),
+    el(
+      'p',
+      'pack-trust',
+      review.runsCode
+        ? 'This pack changes the game’s code as well as its files. A signature shows who made it, not that it is safe: only install packs from servers you trust.'
+        : 'Packs change the files the game loads. Only install packs from servers you trust.',
+    ),
   );
   body.replaceChildren(...parts);
   required('pack-title').textContent = review.update
@@ -186,6 +212,17 @@ export async function bindPacks(profiles, locked) {
     }),
   );
   profiles.onReviewUpdate((url) => run(() => open(url)));
+
+  // One-click starts for the community servers that ship with the launcher.
+  const samples = required('sample-packs');
+  for (const item of array(await invoke('list_sample_packs'), object)) {
+    const button = el('button', 'button', brand(string(item.name)));
+    button.type = 'button';
+    const key = string(item.key);
+    button.addEventListener('click', () => run(async () => open(string(await invoke('sample_pack_source', { key })))));
+    samples.append(button);
+  }
+  samples.hidden = samples.children.length < 2;
 
   // starforge:// links: listen first, then collect one that arrived earlier.
   await listen('pack-link', (url) => {

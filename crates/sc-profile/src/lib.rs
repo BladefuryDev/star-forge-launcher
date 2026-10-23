@@ -20,11 +20,31 @@ pub const LOCAL_FILE: &str = "local.json";
 pub const FILES_DIR: &str = "files";
 /// Folder inside a pack holding launcher artwork.
 pub const RESOURCES_DIR: &str = "resources";
+/// Signed list of every file in a pack and its SHA-256 (see `sc_launch::signing`).
+pub const MANIFEST_FILE: &str = "manifest.json";
+/// Detached ed25519 signature over the exact bytes of [`MANIFEST_FILE`].
+pub const SIGNATURE_FILE: &str = "manifest.sig";
 /// Folder inside a pack holding client patches: `<module>.patchset.toml`
 /// files (see the `sc-patch` crate) and native plugins.
 pub const PATCHES_DIR: &str = "patches";
+/// Files under `files/` the launcher writes itself (from `server.address`),
+/// never part of a pack's signature or file list.
+pub const GENERATED_FILES: [&str; 1] = ["data/address.cfg"];
+/// Record of the files a profile downloaded from its pack's `files_from` list.
+pub const REMOTE_RECORD: &str = "remote-files.json";
+/// Folder inside a profile holding the game's own per-user data for that
+/// profile (its `%LOCALAPPDATA%`): store cache, notes, local server database.
+/// Never part of a pack.
+pub const STATE_DIR: &str = "state";
+/// Files under `%LOCALAPPDATA%` that stay the same across profiles (the
+/// player's graphics settings and key bindings), with `/` separators.
+pub const SHARED_STATE_FILES: [&str; 2] = ["Targem/StarConflict/user_config.xml", "Targem/StarConflict/user_bindings.xml"];
 /// Environment variable sc-inject uses to tell the agent which profile is active.
 pub const PROFILE_ENV: &str = "SC_PROFILE";
+/// Log file sc-inject writes inside the profile folder. Its console output is
+/// lost under Proton, so this is where the launcher finds why a start failed:
+/// the last line starting with `error: `.
+pub const INJECT_LOG: &str = "inject.log";
 /// Log file the agent writes inside the profile folder.
 pub const AGENT_LOG: &str = "agent.log";
 /// Newest pack format this build understands.
@@ -54,6 +74,10 @@ pub struct Pack {
     pub game: Game,
     #[serde(default, skip_serializing_if = "Branding::is_empty")]
     pub branding: Branding,
+    /// Game files downloaded from a published file list instead of shipped in
+    /// `files/`: only new or changed files are fetched on each update.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub files_from: Option<FilesFrom>,
     /// How the patchsets in `patches/` are applied. Experimental.
     #[serde(default, skip_serializing_if = "Patches::is_default")]
     pub patches: Patches,
@@ -176,12 +200,36 @@ impl Branding {
     }
 }
 
+/// `files_from`: where a pack's game files are listed. Exactly one is set.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct FilesFrom {
+    /// A STAR FORGE file list: JSON, `{"files": {"path": {"sha256", "size"}}}`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manifest: Option<String>,
+    /// An `SCMOD1` list (tab-separated path, SHA-256, URL), as used by other
+    /// community launchers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scmod1: Option<String>,
+}
+
+impl FilesFrom {
+    /// The list's URL.
+    pub fn url(&self) -> &str {
+        self.manifest.as_deref().or(self.scmod1.as_deref()).unwrap_or_default()
+    }
+}
+
 /// Where the launcher looks for newer versions of the pack.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Update {
     /// URL of the published `pack.json` (the copy with `download` filled in).
     pub url: String,
+    /// In the published copy: the oldest version the server still accepts.
+    /// Players on anything older must update before the launcher starts the game.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_version: Option<String>,
 }
 
 /// The pack's zip, in the published `pack.json`.
@@ -214,6 +262,11 @@ pub struct Local {
     /// Patches turned on or off by the player: module -> patch id -> on.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub patches: HashMap<String, HashMap<String, bool>>,
+    /// Use the game's normal per-user data folder instead of the profile's
+    /// own (`state\`). Off by default, so servers don't see each other's
+    /// caches; on for a profile that should keep using existing local data.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub shared_game_data: bool,
 }
 
 /// A profile ready to launch: the pack with the player's settings applied.
@@ -227,6 +280,8 @@ pub struct Profile {
     pub patches: Patches,
     /// The player's patch choices from `local.json`.
     pub patch_choices: HashMap<String, HashMap<String, bool>>,
+    /// The game's per-user data lives in the profile's `state\` folder.
+    pub own_game_data: bool,
 }
 
 /// `patches` in `pack.json`: how the pack's patchsets and plugins are applied.
@@ -242,6 +297,10 @@ pub struct Patches {
     /// patching, for hooks a byte patch can't express.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plugins: Vec<String>,
+    /// Core patches that ship with the launcher, by id (`core-patches/` in
+    /// the repository), applied before the pack's own.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub core: Vec<String>,
 }
 
 impl Patches {
@@ -333,9 +392,26 @@ impl Pack {
                 return err(format!("requires.game {h:?}: expected a SHA-256 in hex"));
             }
         }
+        if let Some(min) = self.update.as_ref().and_then(|u| u.min_version.as_ref()) {
+            if parse_version(min).is_none() {
+                return err(format!("update.min_version {min:?}: expected x.y.z"));
+            }
+        }
         if let Some(d) = &self.download {
             if d.sha256.len() != 64 || !d.sha256.chars().all(|c| c.is_ascii_hexdigit()) {
                 return err("download.sha256: expected a SHA-256 in hex".into());
+            }
+        }
+        if let Some(f) = &self.files_from {
+            match (&f.manifest, &f.scmod1) {
+                (Some(url), None) | (None, Some(url)) if url.starts_with("https://") || url.starts_with("http://") => {}
+                (Some(_), None) | (None, Some(_)) => return err("files_from: the list must be an http(s) link".into()),
+                _ => return err("files_from: set exactly one of manifest and scmod1".into()),
+            }
+        }
+        for id in &self.patches.core {
+            if id.is_empty() || !id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') {
+                return err(format!("patches.core {id:?}: expected a core patch id such as \"loose-before-packed\""));
             }
         }
         for p in &self.patches.plugins {
@@ -420,6 +496,7 @@ impl Profile {
             trace_files: local.trace_files,
             patches: pack.patches.clone(),
             patch_choices: local.patches.clone(),
+            own_game_data: !local.shared_game_data,
         }
     }
 
@@ -520,6 +597,11 @@ pub fn relative_to(root: &str, full: &str) -> Option<String> {
     safe.then(|| rel.to_string())
 }
 
+/// The profile's stand-in for `%LOCALAPPDATA%` (see [`STATE_DIR`]).
+pub fn state_local_appdata(profile_dir: &str) -> String {
+    format!("{}\\{STATE_DIR}\\AppData\\Local", normalize(profile_dir))
+}
+
 /// Path inside the profile that would replace `rel`.
 pub fn profile_file(profile_dir: &str, rel: &str) -> String {
     format!("{}\\{}\\{}", normalize(profile_dir), FILES_DIR, rel)
@@ -573,6 +655,7 @@ mod tests {
     #[test]
     fn profile_file_joins() {
         assert_eq!(profile_file(r"Z:\p\", r"data\a.cfg"), r"Z:\p\files\data\a.cfg");
+        assert_eq!(state_local_appdata(r"Z:\p\"), r"Z:\p\state\AppData\Local");
     }
 
     fn pack(json: &str) -> Pack {
@@ -608,6 +691,8 @@ mod tests {
         assert_eq!(mine.server, None);
         assert_eq!(mine.args(), vec!["-launchLocalServer", "-a", "-b"]);
         assert!(mine.trace_files);
+        assert!(plain.own_game_data);
+        assert!(!Profile::new(&p, &Local { shared_game_data: true, ..Local::default() }).own_game_data);
         assert_eq!(mine.patch_choices["game.exe"]["x"], false);
     }
 
@@ -634,6 +719,12 @@ mod tests {
         assert!(!bad(r#"{"branding":{"background":["resources/a.jpg","resources/b.jpg"]}}"#));
         assert!(bad(r#"{"branding":{"background":["resources/a.jpg","../b.jpg"]}}"#));
         assert!(bad(r#"{"requires":{"game":["abc"]}}"#));
+        assert!(!bad(r#"{"update":{"url":"https://a.org/pack.json","min_version":"1.0.0"}}"#));
+        assert!(bad(r#"{"update":{"url":"https://a.org/pack.json","min_version":"soon"}}"#));
+        assert!(!bad(r#"{"files_from":{"scmod1":"https://a.org/manifest.txt"}}"#));
+        assert!(bad(r#"{"files_from":{}}"#));
+        assert!(bad(r#"{"files_from":{"manifest":"https://a.org/a.json","scmod1":"https://a.org/b.txt"}}"#));
+        assert!(bad(r#"{"files_from":{"manifest":"ftp://a.org/a.json"}}"#));
         assert!(bad(r#"{"patches":{"plugins":["../x.dll"]}}"#));
         assert!(bad(r#"{"patches":{"plugins":["patches/x.exe"]}}"#));
         assert!(Pack::from_json(r#"{"format":1,"id":"a","name":"a","version":"1.0.0","patches":{"method":"bake"}}"#).is_err());

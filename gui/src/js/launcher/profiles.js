@@ -10,6 +10,7 @@ function parseProfile(item) {
     name: string(value.name),
     server: value.server === null ? null : string(value.server),
     localServer: boolean(value.localServer),
+    ownGameData: boolean(value.ownGameData),
     patches: number(value.patches, 0, 100000),
     error: value.error === null ? null : string(value.error),
     packId: value.packId === null ? null : string(value.packId),
@@ -36,6 +37,7 @@ export function bindProfiles(preferences, onChange) {
   const nameInput = control('profile-name', HTMLInputElement);
   const serverInput = control('profile-server', HTMLInputElement);
   const localInput = control('profile-local-server', HTMLInputElement);
+  const ownDataInput = control('profile-own-data', HTMLInputElement);
   const formError = required('profile-error');
   const confirm = control('confirm-dialog', HTMLDialogElement);
   /** @type {ProfileInfo[]} */
@@ -136,6 +138,7 @@ export function bindProfiles(preferences, onChange) {
     nameInput.value = brand(profile?.name || '');
     serverInput.value = brand(profile?.server || '');
     localInput.checked = profile ? profile.localServer : false;
+    ownDataInput.checked = profile ? profile.ownGameData : true;
     formError.hidden = true;
     required('pack-import').hidden = Boolean(profile);
     required('profile-managed-note').hidden = !profile?.managed;
@@ -192,6 +195,7 @@ export function bindProfiles(preferences, onChange) {
               name: nameInput.value,
               server: serverInput.value,
               localServer: localInput.checked,
+              ownGameData: ownDataInput.checked,
             },
           }),
         );

@@ -50,6 +50,7 @@ export function mountLayout() {
         <h2 id="pack-import-title">Import a server pack</h2>
         <p>Got a pack link or zip from a server? It brings the server address, files and look in one go.</p>
         <div class="pack-import-row"><input id="pack-link" type="text" placeholder="https://… or starforge://…" spellcheck="false" autocomplete="off" aria-label="Pack link" /><button type="button" class="button" id="pack-link-import">Import</button><button type="button" class="button" id="pack-file-import">Choose zip…</button></div>
+        <div id="sample-packs" class="sample-packs" hidden><span>Community servers</span></div>
         <div class="divider"><span>or set one up yourself</span></div>
       </section>
       <form id="profile-form" method="dialog">
@@ -57,6 +58,7 @@ export function mountLayout() {
         <label class="field">Name<input id="profile-name" type="text" maxlength="64" required placeholder="STARFURY community server" /></label>
         <label class="field">Server address<input id="profile-server" type="text" maxlength="255" placeholder="STARFURY.XYZ:3801" spellcheck="false" autocomplete="off" /><small>Filled in on the login screen. Leave empty to keep the game's own setting.</small></label>
         <label class="check-field"><input id="profile-local-server" type="checkbox" /><span>Start the local server with the game<small>Runs the bundled MongoDB and Hub, as Steam's default launch does. Leave off for profiles that play on someone else's server.</small></span></label>
+        <label class="check-field"><input id="profile-own-data" type="checkbox" /><span>Keep this server's game data separate<small>The game's store cache, notes and local server database stay with this profile, so other servers never see them. Graphics settings and key bindings are shared by all profiles. Turn off to use the game's normal data folder, where any existing local server data is.</small></span></label>
         <p id="profile-error" class="form-error" hidden></p>
         <div class="dialog-actions"><button type="button" class="button danger" id="delete-profile" hidden>Delete</button><button type="button" class="button" id="profile-folder" hidden>Open folder</button><span class="spacer"></span><button type="button" class="button" data-close-dialog>Cancel</button><button type="submit" class="button primary" id="save-profile">Save</button></div>
       </form></div></dialog>

@@ -42,6 +42,21 @@ fn library_of(game_dir: &Path) -> Option<PathBuf> {
     (named(common, "common") && named(steamapps, "steamapps")).then(|| steamapps.parent().map(Path::to_path_buf))?
 }
 
+/// The game install folder alone: `--game-dir`, `STAR_FORGE_GAME_DIR`, or Steam.
+pub fn find_game(opts: &Options) -> Result<PathBuf, String> {
+    let explicit = opts.game_dir.clone().or_else(|| crate::env::path(crate::env::GAME_DIR));
+    let game_dir = match explicit {
+        Some(d) => d,
+        None => steam::find_app(&steam::libraries(&steam::steam_roots()), steam::GAME_APPID)
+            .map(|(_, dir)| dir)
+            .ok_or("Star Conflict was not found in any Steam library; pass --game-dir or set STAR_FORGE_GAME_DIR")?,
+    };
+    if !steam::is_game_dir(&game_dir) {
+        return Err(format!("{} does not look like a Star Conflict install", game_dir.display()));
+    }
+    Ok(game_dir)
+}
+
 pub fn resolve(opts: &Options) -> Result<Setup, String> {
     let env = |explicit: &Option<PathBuf>, name| explicit.clone().or_else(|| crate::env::path(name));
     let opts = &Options {
@@ -51,16 +66,7 @@ pub fn resolve(opts: &Options) -> Result<Setup, String> {
     };
     let roots = steam::steam_roots();
     let libraries = steam::libraries(&roots);
-
-    let game_dir = match &opts.game_dir {
-        Some(d) => d.clone(),
-        None => steam::find_app(&libraries, steam::GAME_APPID)
-            .map(|(_, dir)| dir)
-            .ok_or("Star Conflict was not found in any Steam library; pass --game-dir or set STAR_FORGE_GAME_DIR")?,
-    };
-    if !steam::is_game_dir(&game_dir) {
-        return Err(format!("{} does not look like a Star Conflict install", game_dir.display()));
-    }
+    let game_dir = find_game(opts)?;
 
     let tools_dir = match &opts.tools_dir {
         Some(d) => d.clone(),
@@ -84,7 +90,7 @@ pub fn resolve(opts: &Options) -> Result<Setup, String> {
         crate::compat::detect(&steam_root, &library, &libraries, opts.proton.as_deref())?
     };
     #[cfg(windows)]
-    let _ = (&opts.proton, library_of);
+    let _ = (&opts.proton, library_of, &libraries);
 
     Ok(Setup {
         game_dir,
@@ -92,6 +98,12 @@ pub fn resolve(opts: &Options) -> Result<Setup, String> {
         #[cfg(unix)]
         proton,
     })
+}
+
+/// Why the injector couldn't start the game, from the profile's inject.log.
+pub fn inject_error(profile_dir: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(profile_dir.join(sc_profile::INJECT_LOG)).ok()?;
+    text.lines().rev().find_map(|l| l.strip_prefix("error: ")).map(str::to_string)
 }
 
 /// Path as the injector (a Windows program) should see it.

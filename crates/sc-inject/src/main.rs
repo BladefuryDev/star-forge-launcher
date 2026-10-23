@@ -14,7 +14,7 @@ fn main() {
     match win::run() {
         Ok(code) => std::process::exit(code as i32),
         Err(e) => {
-            eprintln!("sc-inject: {e}");
+            win::say(&format!("error: {e}"));
             std::process::exit(1);
         }
     }
@@ -22,7 +22,20 @@ fn main() {
 
 #[cfg(windows)]
 mod win {
-    use sc_profile::{normalize, windows_path_from_arg, Profile, FILES_DIR, PROFILE_ENV};
+    use sc_profile::{normalize, windows_path_from_arg, Profile, FILES_DIR, INJECT_LOG, PROFILE_ENV};
+    use std::io::Write;
+    use std::sync::{Mutex, OnceLock};
+
+    static LOG: OnceLock<Mutex<std::fs::File>> = OnceLock::new();
+
+    /// Prints a line and appends it to the profile's inject.log (Proton
+    /// swallows this program's console output).
+    pub fn say(msg: &str) {
+        println!("sc-inject: {msg}");
+        if let Some(Ok(mut f)) = LOG.get().map(Mutex::lock) {
+            let _ = writeln!(f, "{msg}");
+        }
+    }
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     use std::path::{Path, PathBuf};
@@ -115,6 +128,9 @@ mod win {
     pub fn run() -> Result<u32, String> {
         let args = parse_args()?;
         let profile_dir = normalize(&args.profile);
+        if let Ok(f) = std::fs::File::create(Path::new(&profile_dir).join(INJECT_LOG)) {
+            let _ = LOG.set(Mutex::new(f));
+        }
         let profile = Profile::load(Path::new(&profile_dir)).map_err(|e| e.to_string())?;
         // Fail before launching, not in-game.
         for file in sc_profile::patchset_files(Path::new(&profile_dir)) {
@@ -155,8 +171,8 @@ mod win {
         // The child inherits our environment; the agent reads the profile from it.
         std::env::set_var(PROFILE_ENV, &profile_dir);
 
-        println!("sc-inject: profile {profile_dir}");
-        println!("sc-inject: starting {cmdline}");
+        say(&format!("profile {profile_dir}"));
+        say(&format!("starting {cmdline}"));
 
         let game_w = wide(&game);
         let dir_w = wide(&game_dir);
@@ -187,7 +203,7 @@ mod win {
         // keep the Proton session, and the launcher, waiting.
         let job = unsafe { CreateJobObjectW(null(), null()) };
         if job.is_null() || unsafe { AssignProcessToJobObject(job, pi.hProcess) } == 0 {
-            eprintln!("sc-inject: {}; processes the game starts will outlive it", last_error("job object setup"));
+            say(&format!("{}; processes the game starts will outlive it", last_error("job object setup")));
         }
 
         if let Err(e) = inject(pi.hProcess, &dll) {
@@ -198,7 +214,7 @@ mod win {
             }
             return Err(e);
         }
-        println!("sc-inject: agent injected, resuming game");
+        say("agent injected, resuming game");
 
         unsafe {
             ResumeThread(pi.hThread);
@@ -208,7 +224,7 @@ mod win {
             let mut code = 0u32;
             GetExitCodeProcess(pi.hProcess, &mut code);
             CloseHandle(pi.hProcess);
-            println!("sc-inject: game exited with {code}");
+            say(&format!("game exited with {code}"));
             if !job.is_null() {
                 let mut info: JOBOBJECT_BASIC_ACCOUNTING_INFORMATION = std::mem::zeroed();
                 let ok = QueryInformationJobObject(
@@ -219,7 +235,7 @@ mod win {
                     null_mut(),
                 );
                 if ok != 0 && info.ActiveProcesses > 0 {
-                    println!("sc-inject: stopping {} process(es) the game left running", info.ActiveProcesses);
+                    say(&format!("stopping {} process(es) the game left running", info.ActiveProcesses));
                 }
                 TerminateJobObject(job, 0);
                 CloseHandle(job);

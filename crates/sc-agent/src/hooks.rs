@@ -67,7 +67,7 @@ thread_local! {
     static IN_HOOK: Cell<bool> = const { Cell::new(false) };
 }
 
-fn wide(s: &str) -> Vec<u16> {
+pub(crate) fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(Some(0)).collect()
 }
 
@@ -95,7 +95,7 @@ unsafe fn ansi_to_wide(p: PCSTR) -> Option<Vec<u16>> {
     Some(buf)
 }
 
-fn ansi(s: &str) -> Option<Vec<u8>> {
+pub(crate) fn ansi(s: &str) -> Option<Vec<u8>> {
     let w = wide(s);
     unsafe {
         let n = WideCharToMultiByte(CP_ACP, 0, w.as_ptr(), -1, std::ptr::null_mut(), 0, std::ptr::null(), std::ptr::null_mut());

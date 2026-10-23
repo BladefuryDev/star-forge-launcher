@@ -154,6 +154,25 @@
         }
       }
     },
+    "files_from": {
+      "description": "Download the pack's game files from a published file list instead of shipping them in files/ (which the pack must then not have). Only new or changed files are fetched. Set exactly one. A signed pack's list must be signed with the same key (<list URL>.sig).",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 1,
+      "properties": {
+        "manifest": {
+          "description": "A STAR FORGE file list (JSON): {\"files\": {\"data/x.lua\": {\"sha256\": \"…\", \"size\": 123}}}, optionally with base_url; make one with sc-launch pack files.",
+          "type": "string",
+          "format": "uri"
+        },
+        "scmod1": {
+          "description": "An SCMOD1 list: first line SCMOD1, then path<TAB>SHA-256<TAB>https URL per file.",
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
     "patches": {
       "description": "Experimental. How the patchsets in the pack's patches/ folder (every patches/<module>.patchset.toml, same format the STAR FORGE Patcher builds for servers) and native plugins are applied.",
       "type": "object",
@@ -181,11 +200,19 @@
             "type": "string",
             "pattern": "^patches/[^\\\\]+\\.[dD][lL][lL]$"
           }
+        },
+        "core": {
+          "description": "Core patches that ship with the launcher, turned on by id (see core-patches/ in the STAR FORGE repository). Applied before the pack's own patchsets.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["loose-before-packed"]
+          }
         }
       }
     },
     "update": {
-      "description": "Where the launcher checks for new versions: the URL of your published pack.json (the copy with download filled in). Packs installed from a published pack.json get this set automatically.",
+      "description": "Where the launcher checks for new versions: the URL of your published pack.json (the copy with download filled in). Unsigned packs installed from a published pack.json get this set automatically; signed packs must set it themselves.",
       "type": "object",
       "required": [
         "url"
@@ -196,6 +223,11 @@
           "type": "string",
           "format": "uri",
           "pattern": "^https://"
+        },
+        "min_version": {
+          "description": "In the published pack.json: the oldest pack version your server still accepts. The launcher won't start the game with anything older until the player updates.",
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([-+].*)?$"
         }
       }
     },

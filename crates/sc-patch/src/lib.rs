@@ -9,6 +9,8 @@
 //! ([`FileImage`]), and a method that writes a patched copy could use
 //! [`FileImage`] too.
 
+pub mod core;
+
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fmt;
