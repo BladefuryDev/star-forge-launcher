@@ -90,7 +90,7 @@ pub fn resolve(opts: &Options) -> Result<Setup, String> {
         crate::compat::detect(&steam_root, &library, &libraries, opts.proton.as_deref())?
     };
     #[cfg(windows)]
-    let _ = (&opts.proton, library_of);
+    let _ = (&opts.proton, library_of, &libraries);
 
     Ok(Setup {
         game_dir,
