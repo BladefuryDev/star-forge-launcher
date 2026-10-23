@@ -173,6 +173,9 @@ fn run() -> Result<u8, String> {
             if let Err(e) = sc_launch::state::sync_shared(&dir, &profile, shared.as_deref()) {
                 eprintln!("warning: could not save game settings back: {e}");
             }
+            if let Some(e) = launch::inject_error(&dir).filter(|_| !status.success()) {
+                eprintln!("sc-launch: the game did not start: {e}");
+            }
             println!("agent log: {}", dir.join(sc_profile::AGENT_LOG).display());
             Ok(status.code().unwrap_or(1).clamp(0, 255) as u8)
         }

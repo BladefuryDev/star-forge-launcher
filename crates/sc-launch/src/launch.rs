@@ -100,6 +100,12 @@ pub fn resolve(opts: &Options) -> Result<Setup, String> {
     })
 }
 
+/// Why the injector couldn't start the game, from the profile's inject.log.
+pub fn inject_error(profile_dir: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(profile_dir.join(sc_profile::INJECT_LOG)).ok()?;
+    text.lines().rev().find_map(|l| l.strip_prefix("error: ")).map(str::to_string)
+}
+
 /// Path as the injector (a Windows program) should see it.
 pub fn tool_path(path: &Path) -> Result<String, String> {
     let text = path

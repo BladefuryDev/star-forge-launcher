@@ -41,6 +41,10 @@ pub const STATE_DIR: &str = "state";
 pub const SHARED_STATE_FILES: [&str; 2] = ["Targem/StarConflict/user_config.xml", "Targem/StarConflict/user_bindings.xml"];
 /// Environment variable sc-inject uses to tell the agent which profile is active.
 pub const PROFILE_ENV: &str = "SC_PROFILE";
+/// Log file sc-inject writes inside the profile folder. Its console output is
+/// lost under Proton, so this is where the launcher finds why a start failed:
+/// the last line starting with `error: `.
+pub const INJECT_LOG: &str = "inject.log";
 /// Log file the agent writes inside the profile folder.
 pub const AGENT_LOG: &str = "agent.log";
 /// Newest pack format this build understands.

@@ -230,7 +230,12 @@ fn start_game(app: &AppHandle) -> Result<(), String> {
         update(&app, |s| s.phase = Some(Phase::Ready));
         match status {
             Ok(s) if s.success() => {}
-            Ok(s) => eprintln!("game exited with {s}"),
+            Ok(s) => {
+                eprintln!("game exited with {s}");
+                if let Some(e) = launch::inject_error(&dir) {
+                    notify(&app, format!("The game did not start: {e}"), NotificationLevel::Error);
+                }
+            }
             Err(e) => eprintln!("could not wait for the game: {e}"),
         }
         if prefs::get(&app).launch_behavior == LaunchBehavior::Tray {
