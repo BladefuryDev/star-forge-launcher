@@ -176,6 +176,8 @@ fn main() {
                 profiles::install_pack,
                 profiles::discard_pack,
                 profiles::pick_pack_file,
+                profiles::list_sample_packs,
+                profiles::sample_pack_source,
                 profiles::check_pack_updates,
                 profiles::take_pending_link,
                 profiles::get_profile_branding,

@@ -1,7 +1,9 @@
 //! Installing and updating server packs.
 //!
 //! A pack arrives as a zip (a file, or a download), a folder, or a published
-//! `pack.json` whose `download` names the zip and its SHA-256. It is unpacked
+//! `pack.json` whose `download` names the zip and its SHA-256. A published
+//! `pack.json` without `download` is a whole pack by itself, for packs that
+//! only set a server and take their game files from a list (`files_from`). It is unpacked
 //! into a staging folder first so the player can review it, then moved into
 //! the profiles folder. Updating replaces the pack's own files and keeps the
 //! player's `local.json`.
@@ -198,7 +200,11 @@ fn stage_into(source: &Source, dir: &Path) -> Result<Staged, String> {
             fetch(url, &download, MAX_PACK_BYTES, None)?;
             if looks_like_json(&download) {
                 let manifest = read_published(&download, url)?;
-                let zip = manifest.download.clone().ok_or_else(|| format!("{url}: this pack.json has no download entry"))?;
+                let Some(zip) = manifest.download.clone() else {
+                    std::fs::create_dir_all(&content).map_err(|e| format!("{}: {e}", content.display()))?;
+                    std::fs::rename(&download, content.join(PACK_FILE)).map_err(|e| e.to_string())?;
+                    return finish_stage(source, dir, &content, url.clone(), false, Some(manifest));
+                };
                 check_url(&zip.url)?;
                 let mut hasher = Sha256::new();
                 fetch(&zip.url, &download, MAX_PACK_BYTES, Some(&mut hasher))?;
@@ -215,8 +221,18 @@ fn stage_into(source: &Source, dir: &Path) -> Result<Staged, String> {
         }
     };
     let _ = std::fs::remove_file(dir.join("download"));
+    finish_stage(source, dir, &content, origin, verified, published)
+}
 
-    let root = find_root(&content)?;
+fn finish_stage(
+    source: &Source,
+    dir: &Path,
+    content: &Path,
+    origin: String,
+    verified: bool,
+    published: Option<Pack>,
+) -> Result<Staged, String> {
+    let root = find_root(content)?;
     let mut pack = profiles::read_pack(&root)?;
     pack.validate().map_err(|e| e.to_string())?;
     let signature = signing::verify(&root, Depth::Full)?;

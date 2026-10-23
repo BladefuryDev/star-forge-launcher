@@ -50,6 +50,7 @@ export function mountLayout() {
         <h2 id="pack-import-title">Import a server pack</h2>
         <p>Got a pack link or zip from a server? It brings the server address, files and look in one go.</p>
         <div class="pack-import-row"><input id="pack-link" type="text" placeholder="https://… or starforge://…" spellcheck="false" autocomplete="off" aria-label="Pack link" /><button type="button" class="button" id="pack-link-import">Import</button><button type="button" class="button" id="pack-file-import">Choose zip…</button></div>
+        <div id="sample-packs" class="sample-packs" hidden><span>Community servers</span></div>
         <div class="divider"><span>or set one up yourself</span></div>
       </section>
       <form id="profile-form" method="dialog">

@@ -213,6 +213,17 @@ export async function bindPacks(profiles, locked) {
   );
   profiles.onReviewUpdate((url) => run(() => open(url)));
 
+  // One-click starts for the community servers that ship with the launcher.
+  const samples = required('sample-packs');
+  for (const item of array(await invoke('list_sample_packs'), object)) {
+    const button = el('button', 'button', brand(string(item.name)));
+    button.type = 'button';
+    const key = string(item.key);
+    button.addEventListener('click', () => run(async () => open(string(await invoke('sample_pack_source', { key })))));
+    samples.append(button);
+  }
+  samples.hidden = samples.children.length < 2;
+
   // starforge:// links: listen first, then collect one that arrived earlier.
   await listen('pack-link', (url) => {
     if (typeof url === 'string') run(() => open(url));

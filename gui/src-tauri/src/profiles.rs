@@ -392,7 +392,10 @@ fn review_of(token: u64, staged: &packs::Staged, game_exe: Option<PathBuf>) -> R
         version: pack.version.clone(),
         description: pack.description.clone(),
         authors: pack.authors.clone(),
-        origin: staged.origin.clone(),
+        origin: match packs::staging_root().map(|r| r.join("samples")) {
+            Some(samples) if std::path::Path::new(&staged.origin).starts_with(&samples) => "Included with STAR FORGE".into(),
+            _ => staged.origin.clone(),
+        },
         verified: staged.verified,
         signer: staged.trust.key().map(|k| k.fingerprint()),
         publisher: match &staged.trust {
@@ -467,6 +470,36 @@ pub fn discard_pack(app: AppHandle, token: u64) {
     if let Some(staged) = app.state::<PackReviews>().staged.lock().unwrap().remove(&token) {
         packs::discard(staged);
     }
+}
+
+/// Community server packs that ship with the launcher (see samples/ in the repo).
+const SAMPLES: [(&str, &str); 2] = [
+    ("starfury", include_str!("../../../samples/starfury/pack.json")),
+    ("sc-classic-europe", include_str!("../../../samples/sc-classic-europe/pack.json")),
+];
+
+#[derive(Serialize)]
+pub struct SamplePack {
+    key: &'static str,
+    name: String,
+}
+
+#[tauri::command]
+pub fn list_sample_packs() -> Vec<SamplePack> {
+    SAMPLES
+        .iter()
+        .filter_map(|(key, json)| Some(SamplePack { key, name: Pack::from_json(json).ok()?.name }))
+        .collect()
+}
+
+/// Writes a sample pack to a folder the review can open, and returns it.
+#[tauri::command]
+pub fn sample_pack_source(key: String) -> Result<String, String> {
+    let (_, json) = SAMPLES.iter().find(|(k, _)| *k == key).ok_or("unknown sample pack")?;
+    let dir = packs::staging_root().ok_or("cannot work out the launcher data folder")?.join("samples").join(&key);
+    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    profiles::write_atomic(&dir.join(sc_profile::PACK_FILE), json)?;
+    Ok(dir.to_string_lossy().into_owned())
 }
 
 #[tauri::command]

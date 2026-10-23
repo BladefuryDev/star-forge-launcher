@@ -25,6 +25,12 @@ to **Unreleased** as you go and rename it to the version when you tag
   community launchers use. Only new or changed files are downloaded, into the
   profile, and they're refreshed before each launch. `sc-launch pack files`
   writes either kind of list
+- Community servers in one click: **Add profile** offers ready-made profiles
+  for STARFURY and Star Conflict Classic Europe (kept in `samples/`)
+- A published `pack.json` without a zip installs on its own, for packs that
+  only set a server and take their game files from a list
+- When the game can't start, the launcher now says why (the injector writes
+  `inject.log` in the profile)
 - The launcher's own `address.cfg` no longer trips a signed pack's check
 - Servers can require a minimum pack version (`update.min_version` in the
   published `pack.json`); older versions must update before playing

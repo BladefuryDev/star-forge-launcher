@@ -166,6 +166,7 @@ sc-launch pack files <folder> <list> [--base-url <url>] [--key <key file>]
 | `crates/sc-launch` | finds Steam, the game and Proton; profile storage; the `sc-launch` CLI |
 | `gui/` | the Tauri desktop launcher (`gui/src` web UI, `gui/src-tauri` Rust side) |
 | `patcher/` | server patcher (C++): applies a server's source-controlled patches to the `cloud/` exes in memory at startup, via a proxy DLL. Built separately with `make`; see [patcher/README.md](patcher/README.md) |
+| `samples/` | ready-made packs for community servers (STARFURY, Star Conflict Classic Europe), offered with one click in the launcher; see [samples/README.md](samples/README.md) |
 | `scripts/` | build and desktop-integration scripts |
 
 ## Releasing
