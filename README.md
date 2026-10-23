@@ -207,7 +207,7 @@ pair and its own `plugins.updater.endpoints`.
 - [x] STAR FORGE's own logo, icon and default theme (v1)
 - [ ] Server status on the play screen (online / player count)
 - [x] Launcher self-update via GitHub releases (signed; AppImage, deb, rpm, NSIS, MSI)
-- [ ] Settings for the theme label ("Faction colour") now that themes go beyond factions
+- [x] Theme picker with colour previews (was "Faction colour")
 - [ ] macOS support (Proton/Wine path)
 
 **Project**

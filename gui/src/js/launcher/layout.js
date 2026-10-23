@@ -44,8 +44,8 @@ export function mountLayout() {
       </footer>
     </main>`;
   const dialogs = document.createElement('div');
-  dialogs.innerHTML = `<dialog id="settings-dialog" class="settings-dialog"><header><h1>Settings</h1><button class="icon-button" data-close-dialog aria-label="Close settings"><span data-icon="close"></span></button></header><nav class="settings-tabs" aria-label="Settings"><button data-settings-tab="launcher" aria-current="page">Launcher</button><button data-settings-tab="game">Star Conflict</button></nav><div id="settings-content"></div><footer id="launcher-version"></footer></dialog>
-    <dialog id="profile-dialog" class="profile-dialog" aria-labelledby="profile-dialog-title"><header><h1 id="profile-dialog-title">Add server profile</h1><button class="icon-button" data-close-dialog aria-label="Close"><span data-icon="close"></span></button></header>
+  dialogs.innerHTML = `<dialog id="settings-dialog" class="settings-dialog framed"><header><h1>Settings</h1><button class="icon-button" data-close-dialog aria-label="Close settings"><span data-icon="close"></span></button></header><nav class="settings-tabs" aria-label="Settings"><button data-settings-tab="launcher" aria-current="page">Launcher</button><button data-settings-tab="game">Star Conflict</button></nav><div class="dialog-body"><div id="settings-content"></div><footer id="launcher-version"></footer></div></dialog>
+    <dialog id="profile-dialog" class="profile-dialog framed" aria-labelledby="profile-dialog-title"><header><h1 id="profile-dialog-title">Add server profile</h1><button class="icon-button" data-close-dialog aria-label="Close"><span data-icon="close"></span></button></header><div class="dialog-body">
       <section id="pack-import" class="pack-import" aria-labelledby="pack-import-title">
         <h2 id="pack-import-title">Import a server pack</h2>
         <p>Got a pack link or zip from a server? It brings the server address, files and look in one go.</p>
@@ -59,9 +59,9 @@ export function mountLayout() {
         <label class="check-field"><input id="profile-local-server" type="checkbox" /><span>Start the local server with the game<small>Runs the bundled MongoDB and Hub, as Steam's default launch does. Leave off for profiles that play on someone else's server.</small></span></label>
         <p id="profile-error" class="form-error" hidden></p>
         <div class="dialog-actions"><button type="button" class="button danger" id="delete-profile" hidden>Delete</button><button type="button" class="button" id="profile-folder" hidden>Open folder</button><span class="spacer"></span><button type="button" class="button" data-close-dialog>Cancel</button><button type="submit" class="button primary" id="save-profile">Save</button></div>
-      </form></dialog>
-    <dialog id="pack-dialog" class="pack-dialog" aria-labelledby="pack-title"><header><h1 id="pack-title">Install server pack</h1><button class="icon-button" data-close-dialog aria-label="Close"><span data-icon="close"></span></button></header>
-      <div id="pack-body" class="pack-body"></div>
+      </form></div></dialog>
+    <dialog id="pack-dialog" class="pack-dialog framed" aria-labelledby="pack-title"><header><h1 id="pack-title">Install server pack</h1><button class="icon-button" data-close-dialog aria-label="Close"><span data-icon="close"></span></button></header>
+      <div id="pack-body" class="pack-body dialog-body"></div>
       <div class="dialog-actions"><span class="spacer"></span><button class="button" data-close-dialog>Cancel</button><button class="button primary" id="pack-install">Install</button></div></dialog>
     <dialog id="confirm-dialog" aria-labelledby="confirm-title"><h2 id="confirm-title">Delete profile?</h2><p id="confirm-text"></p><div class="dialog-actions"><span class="spacer"></span><button class="button" data-close-dialog>Cancel</button><button class="button danger" id="confirm-delete">Delete</button></div></dialog>`;
   document.body.append(dialogs);

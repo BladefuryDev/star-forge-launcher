@@ -13,17 +13,22 @@
   --success: #80ce9d;
   --art-fallback: radial-gradient(ellipse at 70% 30%, #4a3418, #0d0c0b 70%);
 }
-:root[data-faction='starfury'] {
+/* Themes apply to any element, so the theme picker's swatches can show them. */
+[data-faction='starforge'] {
+  --accent: #e39a29;
+  --ink: #1a1206;
+}
+[data-faction='starfury'] {
   --accent: #f12d62;
   --ink: #1f0610;
 }
-:root[data-faction='empire'] {
+[data-faction='empire'] {
   --accent: #e0a35c;
 }
-:root[data-faction='federation'] {
+[data-faction='federation'] {
   --accent: #3d86cc;
 }
-:root[data-faction='jericho'] {
+[data-faction='jericho'] {
   --accent: #e5412f;
 }
 * {
@@ -87,6 +92,36 @@ input[type='checkbox'],
 input[type='radio'],
 input[type='range'] {
   accent-color: var(--accent);
+}
+/* Drawn ourselves: WebKitGTK clips its native checkbox. */
+input[type='checkbox'] {
+  appearance: none;
+  flex: none;
+  display: inline-grid;
+  place-content: center;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border: 1.5px solid #6a625a;
+  border-radius: 4px;
+  background: #26231f;
+  cursor: pointer;
+}
+input[type='checkbox']:hover {
+  border-color: var(--accent);
+}
+input[type='checkbox']:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+input[type='checkbox']:checked::after {
+  content: '';
+  width: 5px;
+  height: 10px;
+  border: solid var(--ink);
+  border-width: 0 2px 2px 0;
+  transform: translateY(-1px) rotate(45deg);
 }
 input[type='range'] {
   padding: 0;
@@ -458,6 +493,34 @@ dialog header {
   justify-content: space-between;
   margin-bottom: 10px;
 }
+/* Header (and tabs, actions) stay put; only the body scrolls. */
+dialog.framed[open] {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+dialog.framed > * {
+  flex: none;
+  margin-left: 24px;
+  margin-right: 24px;
+}
+dialog.framed > header {
+  margin-top: 24px;
+}
+dialog.framed > .dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 0 24px 24px;
+}
+dialog.framed > .dialog-actions {
+  margin-bottom: 24px;
+}
+dialog.framed > .pack-body {
+  padding-top: 8px;
+}
 dialog h1 {
   font-size: 25px;
   margin: 0;
@@ -531,31 +594,66 @@ dialog footer {
   height: 18px;
   flex: none;
 }
-.faction-options {
-  display: flex;
-  gap: 10px;
-  margin: 18px 0;
+.theme-picker {
+  position: relative;
+  flex: none;
 }
-.faction-option {
+.theme-button,
+.theme-option {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.theme-button {
+  min-width: 200px;
+  background: #26231f;
   border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 15px;
-  flex: 1;
+  border-radius: 7px;
+  padding: 9px 12px;
+}
+.theme-button:hover,
+.theme-button[aria-expanded='true'] {
+  border-color: var(--accent);
+}
+.theme-button .caret {
+  margin-left: auto;
+  color: var(--muted);
+}
+.theme-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  min-width: 100%;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: #211e1b;
+  border: 1px solid #454039;
+  border-radius: 10px;
+  box-shadow: 0 12px 40px #0009;
+}
+.theme-option {
+  padding: 9px 10px;
+  border-radius: 7px;
   cursor: pointer;
 }
-.faction-option:has(input:checked) {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+.theme-option[aria-selected='true'] {
+  color: var(--accent);
 }
-.faction-option input {
-  margin: 0;
+.theme-option.active {
+  background: #ffffff0d;
 }
-.faction-option span {
-  font-size: 12px;
-  font-weight: 600;
+/* Accent over the dark ink the theme puts text on. */
+.swatch {
+  flex: none;
+  width: 30px;
+  height: 16px;
+  border-radius: 5px;
+  border: 1px solid #ffffff1f;
+  background: linear-gradient(90deg, var(--accent) 60%, var(--ink) 60%);
 }
 .button {
   background: #2d2925;
@@ -597,9 +695,6 @@ dialog footer {
   .notices {
     left: 28px;
     top: 144px;
-  }
-  .faction-option {
-    padding: 12px;
   }
   .primary-button {
     min-width: 130px;
@@ -852,7 +947,6 @@ dialog footer {
 .pack-body {
   display: grid;
   gap: 16px;
-  margin: 8px 0 22px;
   overflow-wrap: anywhere;
 }
 .pack-head {

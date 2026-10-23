@@ -3,6 +3,9 @@ import { object, boolean, string, choice } from './contracts.js';
 import { brand, required, run, errorMessage, notice } from './ui.js';
 import { factions } from './preferences.js';
 
+/** @param {string} name */
+const themeName = (name) => brand(name[0].toUpperCase() + name.slice(1));
+
 /** @param {import('./preferences.js').PreferenceStore} preferences
  * @param {ReturnType<typeof import('./state.js').createLauncherStore>} store */
 export async function bindSettings(preferences, store) {
@@ -18,7 +21,7 @@ export async function bindSettings(preferences, store) {
         ? `
       <section class="setting-group"><h2>Window behavior</h2>${row('After starting the game', 'Choose where the launcher stays while you play.', 'launch-behavior', '<select id="launch-behavior" data-preference="launchBehavior"><option value="tray">Minimize to tray</option><option value="keepOpen">Keep launcher open</option><option value="exit">Exit launcher</option></select>')}
       ${row('When closing the launcher', 'Choose what happens when you click X.', 'close-behavior', '<select id="close-behavior" data-preference="closeBehavior"><option value="tray">Minimize to tray</option><option value="exit">Exit launcher</option></select>')}</section>
-      <section class="setting-group"><h2>Appearance</h2><span>Faction color</span><div class="faction-options">${factions.map((name) => `<label class="faction-option"><input type="radio" name="faction-theme" data-preference="factionTheme" value="${name}"><span>${brand(name[0].toUpperCase() + name.slice(1))}</span></label>`).join('')}</div>
+      <section class="setting-group"><h2>Appearance</h2>${row('Color theme', 'Hover a theme to preview it.', 'theme-button', `<div class="theme-picker"><button type="button" class="theme-button" id="theme-button" aria-haspopup="listbox" aria-expanded="false" aria-controls="theme-list"><span class="swatch"></span><span class="theme-name"></span><span class="caret" aria-hidden="true">▾</span></button><ul class="theme-list" id="theme-list" role="listbox" aria-label="Color theme" hidden>${factions.map((name) => `<li class="theme-option" role="option" id="theme-${name}" data-theme="${name}"><span class="swatch" data-faction="${name}"></span>${themeName(name)}</li>`).join('')}</ul></div>`)}
       ${row('Server pack look', 'Show the selected server pack’s logo, icon, background and color. Its color replaces the faction color.', 'pack-branding', '<input id="pack-branding" data-preference="packBranding" type="checkbox">')}
       ${row('Background folder', 'Your own wallpapers: one is picked at random each time the launcher starts, unless the server pack brings its own.', 'background-folder', '<span class="folder-field"><input id="background-folder" data-preference="backgroundFolder" type="text" spellcheck="false" placeholder="Steam banner"><button class="button" id="pick-background-folder">Browse…</button></span>')}</section>
       <section class="setting-group"><h2>Updates</h2>${row('Check for launcher updates', 'Look for a new STAR FORGE Launcher version each time it starts.', 'check-updates', '<input id="check-updates" data-preference="checkUpdates" type="checkbox">')}
@@ -41,7 +44,8 @@ export async function bindSettings(preferences, store) {
   };
   const sync = () => {
     const values = preferences.get();
-    document.documentElement.dataset.faction = values.factionTheme;
+    const previewing = area.querySelector('#theme-button[aria-expanded="true"]');
+    if (!previewing) document.documentElement.dataset.faction = values.factionTheme;
     area.querySelectorAll('[data-preference]').forEach((input) => {
       if (!(input instanceof HTMLInputElement || input instanceof HTMLSelectElement)) return;
       if (input === document.activeElement && input.type === 'text') return;
@@ -53,6 +57,15 @@ export async function bindSettings(preferences, store) {
         input.checked = entry[1] === true;
       else input.value = String(entry[1]);
     });
+    const theme = area.querySelector('#theme-button');
+    if (theme && !previewing) {
+      theme.querySelector('.swatch')?.setAttribute('data-faction', values.factionTheme);
+      const name = theme.querySelector('.theme-name');
+      if (name) name.textContent = themeName(values.factionTheme);
+      area.querySelectorAll('.theme-option').forEach((option) =>
+        option.setAttribute('aria-selected', String(option.getAttribute('data-theme') === values.factionTheme)),
+      );
+    }
     const state = store.getSnapshot();
     const game = area.querySelector('#detected-game');
     if (game)
@@ -64,14 +77,83 @@ export async function bindSettings(preferences, store) {
     const proton = area.querySelector('#detected-proton');
     if (proton) proton.textContent = state?.proton ? `Using ${state.proton}` : '';
   };
+  // Theme picker: hovering or arrowing through themes previews them on the
+  // whole launcher; closing without choosing puts the saved one back.
+  const picker = () => {
+    const button = area.querySelector('#theme-button');
+    const list = area.querySelector('#theme-list');
+    return button instanceof HTMLElement && list instanceof HTMLElement ? { button, list } : null;
+  };
+  const options = () => Array.from(area.querySelectorAll('.theme-option'));
+  /** @param {Element | undefined} option */
+  const preview = (option) => {
+    const parts = picker();
+    if (!parts || !option) return;
+    options().forEach((item) => item.classList.toggle('active', item === option));
+    parts.button.setAttribute('aria-activedescendant', option.id);
+    document.documentElement.dataset.faction = option.getAttribute('data-theme') || '';
+    option.scrollIntoView({ block: 'nearest' });
+  };
+  const openThemes = () => {
+    const parts = picker();
+    if (!parts) return;
+    parts.list.hidden = false;
+    parts.button.setAttribute('aria-expanded', 'true');
+    preview(options().find((item) => item.getAttribute('aria-selected') === 'true'));
+  };
+  /** @param {string} [chosen] */
+  const closeThemes = (chosen) => {
+    const parts = picker();
+    if (!parts || parts.list.hidden) return;
+    parts.list.hidden = true;
+    parts.button.setAttribute('aria-expanded', 'false');
+    parts.button.removeAttribute('aria-activedescendant');
+    // Saving re-syncs through the preferences subscription.
+    if (chosen) run(() => preferences.update('factionTheme', choice(chosen, factions)));
+    else sync();
+  };
+  area.addEventListener('click', (event) => {
+    if (!(event.target instanceof Element)) return;
+    const option = event.target.closest('.theme-option');
+    if (option) closeThemes(option.getAttribute('data-theme') || undefined);
+    else if (event.target.closest('#theme-button'))
+      picker()?.list.hidden ? openThemes() : closeThemes();
+  });
+  area.addEventListener('mouseover', (event) => {
+    if (event.target instanceof Element && !picker()?.list.hidden) {
+      const option = event.target.closest('.theme-option');
+      if (option) preview(option);
+    }
+  });
+  area.addEventListener('keydown', (event) => {
+    const parts = picker();
+    if (!parts || !(event.target instanceof Element) || !event.target.closest('#theme-button')) return;
+    const all = options();
+    const current = all.findIndex((item) => item.classList.contains('active'));
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (parts.list.hidden) openThemes();
+      else preview(all[(current + (event.key === 'ArrowDown' ? 1 : all.length - 1)) % all.length]);
+    } else if ((event.key === 'Enter' || event.key === ' ') && !parts.list.hidden) {
+      event.preventDefault();
+      closeThemes(all[current]?.getAttribute('data-theme') || undefined);
+    } else if (event.key === 'Escape' && !parts.list.hidden) {
+      // Close the list, not the settings dialog.
+      event.preventDefault();
+      event.stopPropagation();
+      closeThemes();
+    }
+  });
+  document.addEventListener('click', (event) => {
+    if (event.target instanceof Element && !event.target.closest('.theme-picker')) closeThemes();
+  });
   preferences.subscribe(sync);
   store.subscribe(sync);
   area.addEventListener('change', (event) => {
     const input = event.target;
     if (!(input instanceof HTMLInputElement || input instanceof HTMLSelectElement)) return;
     const key = input.dataset.preference;
-    if (key === 'factionTheme') run(() => preferences.update(key, choice(input.value, factions)));
-    else if (key === 'launchBehavior')
+    if (key === 'launchBehavior')
       run(() => preferences.update(key, choice(input.value, ['tray', 'keepOpen', 'exit'])));
     else if (key === 'closeBehavior')
       run(() => preferences.update(key, choice(input.value, ['tray', 'exit'])));
