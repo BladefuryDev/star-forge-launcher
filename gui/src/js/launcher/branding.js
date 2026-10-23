@@ -3,7 +3,7 @@ import { object } from './contracts.js';
 import { image, setBackground } from './artwork.js';
 import { required, run } from './ui.js';
 
-const defaults = { logo: 'assets/starforge-logo.png', icon: 'assets/starforge-emblem.png' };
+const defaults = { logo: 'assets/starforge-logo.svg', icon: 'assets/starforge-emblem.svg' };
 
 /** @param {unknown} input */
 function parseBranding(input) {

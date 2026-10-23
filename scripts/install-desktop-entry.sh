@@ -21,13 +21,15 @@ install -Dm644 "$ICONS/128x128@2x.png" "$DATA/icons/hicolor/256x256/apps/star-fo
 install -Dm644 "$ICONS/icon.png" "$DATA/icons/hicolor/512x512/apps/star-forge.png"
 
 # The file name and StartupWMClass both match the app id (the Tauri identifier).
+# Icon is a full path: by name, KDE falls back from "star-forge" to a theme's
+# own "star" icon before it looks in hicolor.
 install -Dm644 /dev/stdin "$DATA/applications/star-forge.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=STAR FORGE Launcher
 Comment=Star Conflict profile launcher
 Exec="$BIN"
-Icon=star-forge
+Icon=$DATA/icons/hicolor/256x256/apps/star-forge.png
 StartupWMClass=star-forge
 Categories=Game;
 EOF
