@@ -35,6 +35,8 @@ pub struct ProfileInfo {
     name: String,
     server: Option<String>,
     local_server: bool,
+    /// The game's per-user data stays in the profile (see sc_launch::state).
+    own_game_data: bool,
     patches: usize,
     error: Option<String>,
     pack_id: Option<String>,
@@ -65,6 +67,7 @@ pub fn list_profiles() -> Result<Vec<ProfileInfo>, String> {
                 id: e.name.clone(),
                 server: None,
                 local_server: false,
+                own_game_data: true,
                 patches: 0,
                 error: None,
                 pack_id: pack.map(|p| p.id.clone()),
@@ -81,6 +84,7 @@ pub fn list_profiles() -> Result<Vec<ProfileInfo>, String> {
                     ProfileInfo {
                         server: p.server.clone(),
                         local_server: p.local_server,
+                        own_game_data: p.own_game_data,
                         patches: patching.patches,
                         error: patching.errors.first().cloned(),
                         ..base(if p.name.trim().is_empty() { e.name.clone() } else { p.name.clone() })
@@ -99,6 +103,7 @@ pub struct ProfileInput {
     name: String,
     server: String,
     local_server: bool,
+    own_game_data: bool,
 }
 
 /// Removes an `address.cfg` this launcher generated, so clearing the server
@@ -147,6 +152,7 @@ pub fn save_profile(app: AppHandle, profile: ProfileInput) -> Result<String, Str
             let pack_server = pack.server.address.as_deref().unwrap_or("");
             local.server = (server != pack_server).then(|| server.to_string());
             local.local_server = (profile.local_server != pack.server.local).then_some(profile.local_server);
+            local.shared_game_data = !profile.own_game_data;
             sc_profile::Profile::new(&pack, &local).address_cfg().map_err(|_| ADDRESS_HINT.to_string())?;
             profiles::write_local(&dir, &local)?;
         }
@@ -157,6 +163,7 @@ pub fn save_profile(app: AppHandle, profile: ProfileInput) -> Result<String, Str
             pack.server.address = (!server.is_empty()).then(|| server.to_string());
             pack.server.local = profile.local_server;
             write_own_pack(&dir, &pack)?;
+            set_shared_game_data(&dir, !profile.own_game_data)?;
         }
         None => {
             let mut pack = Pack {
@@ -170,9 +177,11 @@ pub fn save_profile(app: AppHandle, profile: ProfileInput) -> Result<String, Str
             pack.server.address = (!server.is_empty()).then(|| server.to_string());
             pack.server.local = profile.local_server;
             std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-            write_own_pack(&dir, &pack).inspect_err(|_| {
-                let _ = std::fs::remove_dir_all(&dir);
-            })?;
+            write_own_pack(&dir, &pack)
+                .and_then(|()| set_shared_game_data(&dir, !profile.own_game_data))
+                .inspect_err(|_| {
+                    let _ = std::fs::remove_dir_all(&dir);
+                })?;
         }
     }
     if server.is_empty() {
@@ -188,6 +197,16 @@ pub fn save_profile(app: AppHandle, profile: ProfileInput) -> Result<String, Str
 
 const SCHEMA_URL: &str = "https://raw.githubusercontent.com/starfury-xyz/star-forge-launcher/main/schemas/pack.schema.json";
 
+/// The game data choice lives in local.json for every kind of profile.
+fn set_shared_game_data(dir: &std::path::Path, shared: bool) -> Result<(), String> {
+    let mut local = profiles::read_local(dir)?;
+    if local.shared_game_data != shared {
+        local.shared_game_data = shared;
+        profiles::write_local(dir, &local)?;
+    }
+    Ok(())
+}
+
 fn write_own_pack(dir: &std::path::Path, pack: &Pack) -> Result<(), String> {
     sc_profile::Profile::new(pack, &Local::default()).address_cfg().map_err(|_| ADDRESS_HINT.to_string())?;
     profiles::write_pack(dir, pack)
@@ -196,7 +215,12 @@ fn write_own_pack(dir: &std::path::Path, pack: &Pack) -> Result<(), String> {
 #[tauri::command]
 pub fn delete_profile(app: AppHandle, id: String) -> Result<(), String> {
     let dir = profile_dir(&id)?;
+    let pack_id = profiles::read_pack(&dir).map(|p| p.id);
     std::fs::remove_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    // A reinstall starts over, so a server that changed its signing key can be installed again.
+    if let Ok(pack_id) = pack_id {
+        sc_launch::trust::unpin(&pack_id)?;
+    }
     crate::prefs::modify(&app, |p| {
         if p.selected_profile == id {
             p.selected_profile.clear();
@@ -303,6 +327,14 @@ pub struct PackReview {
     authors: Vec<String>,
     origin: String,
     verified: bool,
+    /// Key fingerprint, when signed.
+    signer: Option<String>,
+    /// Publisher name, when the key belongs to a publisher the launcher knows.
+    publisher: Option<String>,
+    /// Signed with a key not seen before for this pack (it gets remembered).
+    new_key: bool,
+    /// Patches or plugins: the pack changes the game's code.
+    runs_code: bool,
     managed: bool,
     server: Option<String>,
     local_server: bool,
@@ -358,6 +390,13 @@ fn review_of(token: u64, staged: &packs::Staged, game_exe: Option<PathBuf>) -> R
         authors: pack.authors.clone(),
         origin: staged.origin.clone(),
         verified: staged.verified,
+        signer: staged.trust.key().map(|k| k.fingerprint()),
+        publisher: match &staged.trust {
+            sc_launch::trust::Trust::Known { name, .. } => Some(name.clone()),
+            _ => None,
+        },
+        new_key: matches!(staged.trust, sc_launch::trust::Trust::NewKey(_)),
+        runs_code: staged.reach.runs_code(),
         managed: pack.update.is_some(),
         server: pack.server.address.clone(),
         local_server: pack.server.local,

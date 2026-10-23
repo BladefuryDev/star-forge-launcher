@@ -27,6 +27,13 @@ pub const SIGNATURE_FILE: &str = "manifest.sig";
 /// Folder inside a pack holding client patches: `<module>.patchset.toml`
 /// files (see the `sc-patch` crate) and native plugins.
 pub const PATCHES_DIR: &str = "patches";
+/// Folder inside a profile holding the game's own per-user data for that
+/// profile (its `%LOCALAPPDATA%`): store cache, notes, local server database.
+/// Never part of a pack.
+pub const STATE_DIR: &str = "state";
+/// Files under `%LOCALAPPDATA%` that stay the same across profiles (the
+/// player's graphics settings and key bindings), with `/` separators.
+pub const SHARED_STATE_FILES: [&str; 2] = ["Targem/StarConflict/user_config.xml", "Targem/StarConflict/user_bindings.xml"];
 /// Environment variable sc-inject uses to tell the agent which profile is active.
 pub const PROFILE_ENV: &str = "SC_PROFILE";
 /// Log file the agent writes inside the profile folder.
@@ -218,6 +225,11 @@ pub struct Local {
     /// Patches turned on or off by the player: module -> patch id -> on.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub patches: HashMap<String, HashMap<String, bool>>,
+    /// Use the game's normal per-user data folder instead of the profile's
+    /// own (`state\`). Off by default, so servers don't see each other's
+    /// caches; on for a profile that should keep using existing local data.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub shared_game_data: bool,
 }
 
 /// A profile ready to launch: the pack with the player's settings applied.
@@ -231,6 +243,8 @@ pub struct Profile {
     pub patches: Patches,
     /// The player's patch choices from `local.json`.
     pub patch_choices: HashMap<String, HashMap<String, bool>>,
+    /// The game's per-user data lives in the profile's `state\` folder.
+    pub own_game_data: bool,
 }
 
 /// `patches` in `pack.json`: how the pack's patchsets and plugins are applied.
@@ -424,6 +438,7 @@ impl Profile {
             trace_files: local.trace_files,
             patches: pack.patches.clone(),
             patch_choices: local.patches.clone(),
+            own_game_data: !local.shared_game_data,
         }
     }
 
@@ -524,6 +539,11 @@ pub fn relative_to(root: &str, full: &str) -> Option<String> {
     safe.then(|| rel.to_string())
 }
 
+/// The profile's stand-in for `%LOCALAPPDATA%` (see [`STATE_DIR`]).
+pub fn state_local_appdata(profile_dir: &str) -> String {
+    format!("{}\\{STATE_DIR}\\AppData\\Local", normalize(profile_dir))
+}
+
 /// Path inside the profile that would replace `rel`.
 pub fn profile_file(profile_dir: &str, rel: &str) -> String {
     format!("{}\\{}\\{}", normalize(profile_dir), FILES_DIR, rel)
@@ -577,6 +597,7 @@ mod tests {
     #[test]
     fn profile_file_joins() {
         assert_eq!(profile_file(r"Z:\p\", r"data\a.cfg"), r"Z:\p\files\data\a.cfg");
+        assert_eq!(state_local_appdata(r"Z:\p\"), r"Z:\p\state\AppData\Local");
     }
 
     fn pack(json: &str) -> Pack {
@@ -612,6 +633,8 @@ mod tests {
         assert_eq!(mine.server, None);
         assert_eq!(mine.args(), vec!["-launchLocalServer", "-a", "-b"]);
         assert!(mine.trace_files);
+        assert!(plain.own_game_data);
+        assert!(!Profile::new(&p, &Local { shared_game_data: true, ..Local::default() }).own_game_data);
         assert_eq!(mine.patch_choices["game.exe"]["x"], false);
     }
 

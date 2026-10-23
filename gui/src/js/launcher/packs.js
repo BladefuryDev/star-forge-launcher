@@ -17,6 +17,10 @@ function parseReview(item) {
     authors: array(value.authors, string),
     origin: string(value.origin),
     verified: boolean(value.verified),
+    signer: text(value.signer),
+    publisher: text(value.publisher),
+    newKey: boolean(value.newKey),
+    runsCode: boolean(value.runsCode),
     managed: boolean(value.managed),
     server: text(value.server),
     localServer: boolean(value.localServer),
@@ -62,6 +66,16 @@ function renderReview(review) {
   if (review.authors.length) fact('By', review.authors.join(', '));
   fact('From', review.origin);
   fact('Download', review.verified ? 'Checked against the published checksum' : 'Not checked (no published checksum)');
+  fact(
+    'Signature',
+    !review.signer
+      ? 'Not signed'
+      : review.publisher
+        ? `${brand(review.publisher)} (key ${review.signer})`
+        : review.newKey
+          ? `Key ${review.signer}, new: updates must be signed with it from now on`
+          : `Key ${review.signer}, same as the installed version`,
+  );
   const server = brand(review.server || 'Game default');
   fact('Server', review.update && review.update.server !== review.server ? `${brand(review.update.server || 'Game default')} → ${server}` : server);
   fact('Starts', review.localServer ? 'Game and local server' : 'Game only');
@@ -92,7 +106,13 @@ function renderReview(review) {
     parts.push(list);
   }
   parts.push(
-    el('p', 'pack-trust', 'Packs change the files the game loads. Only install packs from servers you trust.'),
+    el(
+      'p',
+      'pack-trust',
+      review.runsCode
+        ? 'This pack changes the game’s code as well as its files. A signature shows who made it, not that it is safe: only install packs from servers you trust.'
+        : 'Packs change the files the game loads. Only install packs from servers you trust.',
+    ),
   );
   body.replaceChildren(...parts);
   required('pack-title').textContent = review.update

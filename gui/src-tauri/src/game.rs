@@ -171,9 +171,12 @@ fn start_game(app: &AppHandle) -> Result<(), String> {
     if let Some(warning) = profiles::read_pack(&dir).ok().and_then(|p| sc_launch::packs::game_build_warning(&p, &setup.game_exe())) {
         notify(app, warning, NotificationLevel::Info);
     }
+    sc_launch::packs::verify_installed(&dir)?;
     for warning in sc_launch::patching::preflight(&dir, &profile, &setup.game_exe())? {
         notify(app, warning, NotificationLevel::Info);
     }
+    let shared = sc_launch::state::shared_local_appdata(&setup);
+    sc_launch::state::sync_shared(&dir, &profile, shared.as_deref())?;
     let mut cmd = launch::command(&setup, &dir, &[])?;
 
     // Proton and the injector are chatty; keep their output for troubleshooting.
@@ -214,6 +217,9 @@ fn start_game(app: &AppHandle) -> Result<(), String> {
     let app = app.clone();
     std::thread::spawn(move || {
         let status = child.wait();
+        if let Err(e) = sc_launch::state::sync_shared(&dir, &profile, shared.as_deref()) {
+            notify(&app, format!("Could not save your game settings for other profiles: {e}"), NotificationLevel::Error);
+        }
         update(&app, |s| s.phase = Some(Phase::Ready));
         match status {
             Ok(s) if s.success() => {}

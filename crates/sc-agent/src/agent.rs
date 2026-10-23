@@ -84,6 +84,9 @@ pub fn init() -> bool {
     if !crate::patches::apply_all(&profile_dir, &profile) {
         return false;
     }
+    if profile.own_game_data {
+        crate::folders::install(&sc_profile::state_local_appdata(&profile_dir));
+    }
 
     if game_root.is_empty() {
         log("could not work out the game root; file redirects disabled");

@@ -143,6 +143,8 @@ fn run() -> Result<u8, String> {
             for warning in sc_launch::patching::preflight(&dir, &profile, &setup.game_exe())? {
                 eprintln!("warning: {warning}");
             }
+            let shared = sc_launch::state::shared_local_appdata(&setup);
+            sc_launch::state::sync_shared(&dir, &profile, shared.as_deref())?;
             let mut cmd = launch::command(&setup, &dir, &cli.game_args)?;
             println!(
                 "starting {} with profile {name}{} ({})",
@@ -151,6 +153,9 @@ fn run() -> Result<u8, String> {
                 describe_trust(&trust)
             );
             let status = cmd.status().map_err(|e| format!("could not start the injector: {e}"))?;
+            if let Err(e) = sc_launch::state::sync_shared(&dir, &profile, shared.as_deref()) {
+                eprintln!("warning: could not save game settings back: {e}");
+            }
             println!("agent log: {}", dir.join(sc_profile::AGENT_LOG).display());
             Ok(status.code().unwrap_or(1).clamp(0, 255) as u8)
         }

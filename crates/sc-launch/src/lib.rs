@@ -10,6 +10,7 @@ pub mod packs;
 pub mod patching;
 pub mod profiles;
 pub mod signing;
+pub mod state;
 pub mod steam;
 pub mod trust;
 
