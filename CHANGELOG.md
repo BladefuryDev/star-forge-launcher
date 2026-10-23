@@ -6,6 +6,8 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+## 0.2.2
+
 - New logo and emblem (SVG) and new app icons
 - Settings: colour theme dropdown with swatches and a live preview on hover
 - Dialogs keep their title and close button in place while the content scrolls
