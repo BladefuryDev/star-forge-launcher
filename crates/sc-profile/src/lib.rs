@@ -297,6 +297,10 @@ pub struct Patches {
     /// patching, for hooks a byte patch can't express.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plugins: Vec<String>,
+    /// Core patches that ship with the launcher, by id (`core-patches/` in
+    /// the repository), applied before the pack's own.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub core: Vec<String>,
 }
 
 impl Patches {
@@ -403,6 +407,11 @@ impl Pack {
                 (Some(url), None) | (None, Some(url)) if url.starts_with("https://") || url.starts_with("http://") => {}
                 (Some(_), None) | (None, Some(_)) => return err("files_from: the list must be an http(s) link".into()),
                 _ => return err("files_from: set exactly one of manifest and scmod1".into()),
+            }
+        }
+        for id in &self.patches.core {
+            if id.is_empty() || !id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') {
+                return err(format!("patches.core {id:?}: expected a core patch id such as \"loose-before-packed\""));
             }
         }
         for p in &self.patches.plugins {

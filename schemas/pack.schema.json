@@ -200,6 +200,14 @@
             "type": "string",
             "pattern": "^patches/[^\\\\]+\\.[dD][lL][lL]$"
           }
+        },
+        "core": {
+          "description": "Core patches that ship with the launcher, turned on by id (see core-patches/ in the STAR FORGE repository). Applied before the pack's own patchsets.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["loose-before-packed"]
+          }
         }
       }
     },

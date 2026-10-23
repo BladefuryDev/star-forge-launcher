@@ -112,7 +112,7 @@ When players must update to keep playing, set `min_version` in the
 
 Before each launch the launcher asks that address; anyone on an older version
 is told to update first. If your site can't be reached, the game still
-starts, with a warning.
+starts, and players are told the update check failed.
 
 ### Game builds
 
@@ -125,10 +125,12 @@ build get a warning:
 
 ## Things to know
 
-- **`.pak` files win.** The game prefers a file inside a `.pak` archive over a
-  loose file at the same path, so `files/` can replace a whole `.pak` or files
-  the game keeps loose (most of `data/gamedata`, UI scripts), but not a single
-  file inside a `.pak` without a client patch.
+- **`.pak` files win** unless you say otherwise. The game prefers a file inside
+  a `.pak` archive over a loose file at the same path, so `files/` replaces
+  files the game keeps loose (most of `data/gamedata`, UI scripts) or a whole
+  `.pak`. To replace single packed files (such as the strings in
+  `data/strings/`), add `"patches": {"core": ["loose-before-packed"]}`; see
+  [Client patches](client-patches.md#core-patches).
 - **Data the client and server share** (for example
   `data/gamedata/shared/*.lua`) should match your server's, or the client shows
   stock values your server doesn't use.

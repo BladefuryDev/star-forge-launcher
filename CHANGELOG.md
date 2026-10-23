@@ -25,6 +25,9 @@ to **Unreleased** as you go and rename it to the version when you tag
   community launchers use. Only new or changed files are downloaded, into the
   profile, and they're refreshed before each launch. `sc-launch pack files`
   writes either kind of list
+- Core patches that ship with the launcher, turned on by a pack with
+  `"patches": {"core": [...]}`. The first, `loose-before-packed`, lets a pack
+  replace single files inside `.pak` archives (such as the game's strings)
 - Community servers in one click: **Add profile** offers ready-made profiles
   for STARFURY and Star Conflict Classic Europe (kept in `samples/`)
 - A published `pack.json` without a zip installs on its own, for packs that

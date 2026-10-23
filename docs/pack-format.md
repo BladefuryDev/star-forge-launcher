@@ -27,7 +27,7 @@ Only `format`, `id`, `name` and `version` are required.
 | `branding.background` | An image in `resources/`, or a list to pick from at random. |
 | `branding.accent` | Accent colour, `#rrggbb`. Replaces the player's theme colour while the pack is selected (players can turn pack styling off). |
 | `files_from` | Take game files from a published list instead of `files/`: `{"manifest": url}` (STAR FORGE list) or `{"scmod1": url}`. See [File lists](file-lists.md). |
-| `patches` | How client patches apply: `method` (`inject`), `on_error` (`exit` or `continue`), `plugins` (DLLs in `patches/`). See [Client patches](client-patches.md). |
+| `patches` | Client patches: `core` (launcher-provided patches by id, such as `loose-before-packed`), `method` (`inject`), `on_error` (`exit` or `continue`), `plugins` (DLLs in `patches/`). See [Client patches](client-patches.md). |
 | `update.url` | The published `pack.json` the launcher checks for new versions. |
 | `update.min_version` | In the published copy: the oldest version players may still play with. |
 | `download` | Only in the published copy: `url` and `sha256` of the pack zip. |

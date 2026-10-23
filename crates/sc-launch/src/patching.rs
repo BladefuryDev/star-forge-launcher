@@ -9,6 +9,17 @@ use sc_patch::Patchset;
 use sc_profile::{OnError, Profile, PATCHES_DIR};
 use std::path::Path;
 
+/// Everything a profile patches: the core patches its pack turns on, then the
+/// pack's own patchsets.
+pub fn all_sets(profile_dir: &Path, profile: &Profile) -> Vec<Result<Patchset, String>> {
+    let mut out: Vec<Result<Patchset, String>> = match sc_patch::core::sets(&profile.patches.core) {
+        Ok(sets) => sets.into_iter().map(Ok).collect(),
+        Err(e) => vec![Err(e)],
+    };
+    out.extend(load_sets(profile_dir));
+    out
+}
+
 /// The patchsets in a profile folder, parsed. Unreadable ones are errors.
 pub fn load_sets(profile_dir: &Path) -> Vec<Result<Patchset, String>> {
     sc_profile::patchset_files(profile_dir)
@@ -34,11 +45,13 @@ pub struct Summary {
 
 pub fn summary(profile_dir: &Path, profile: &Profile) -> Summary {
     let mut s = Summary { plugins: profile.patches.plugins.len(), ..Summary::default() };
-    for set in load_sets(profile_dir) {
+    for set in all_sets(profile_dir, profile) {
         match set {
             Ok(set) => {
                 s.patches += set.enabled(choices(profile, &set.exe)).0.len();
-                s.modules.push(set.exe);
+                if !s.modules.contains(&set.exe) {
+                    s.modules.push(set.exe);
+                }
             }
             Err(e) => s.errors.push(e),
         }
@@ -69,7 +82,7 @@ pub fn preflight(profile_dir: &Path, profile: &Profile, game_exe: &Path) -> Resu
     let win64 = game_exe.parent().unwrap_or(Path::new("."));
     let mut problems = Vec::new();
     let mut warnings = Vec::new();
-    for set in load_sets(profile_dir) {
+    for set in all_sets(profile_dir, profile) {
         let set = match set {
             Ok(s) => s,
             Err(e) => {

@@ -53,6 +53,7 @@ variables, then auto-detection.
 | `samples/` | ready-made community server packs, offered in **Add profile** (listed in `SAMPLES` in `gui/src-tauri/src/profiles.rs`) |
 | `schemas/` | JSON schema for `pack.json` |
 | `templates/pack/` | the pack template for server teams |
+| `core-patches/` | core patchsets packs turn on by id (with their assembly sources), compiled into the launcher and agent |
 | `docs/` | this documentation |
 | `scripts/` | build and desktop-integration scripts |
 

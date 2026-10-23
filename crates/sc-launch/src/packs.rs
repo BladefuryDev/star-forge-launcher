@@ -134,8 +134,10 @@ pub struct Staged {
 pub struct Reach {
     /// Files the game reads (data, scripts, configs) under `files/`.
     pub files: usize,
-    /// Patchsets that change the game's code in memory.
+    /// The pack's own patchsets, which change the game's code in memory.
     pub patchsets: usize,
+    /// Core patches it turns on; their code ships with the launcher.
+    pub core: usize,
     /// Native DLLs loaded into the game.
     pub plugins: usize,
 }
@@ -145,11 +147,13 @@ impl Reach {
         Reach {
             files: file_list(root).len(),
             patchsets: sc_profile::patchset_files(root).len(),
+            core: pack.patches.core.len(),
             plugins: pack.patches.plugins.len(),
         }
     }
 
-    /// Whether the pack changes the game's code, not just its data.
+    /// Whether the pack brings its own code for the game, beyond its data
+    /// and the launcher's core patches.
     pub fn runs_code(&self) -> bool {
         self.patchsets > 0 || self.plugins > 0
     }
@@ -287,6 +291,7 @@ fn finish_stage(
             }
         }
     }
+    sc_patch::core::sets(&pack.patches.core)?;
     let sets = crate::patching::load_sets(&root);
     for e in sets.iter().filter_map(|s| s.as_ref().err()) {
         warnings.push(format!("Broken patch file: {e}"));
@@ -504,7 +509,8 @@ pub fn check_update(pack: &Pack) -> Result<Option<Available>, String> {
 
 /// Before a launch: asks the pack's server whether the installed version is
 /// still accepted. `Err` means it isn't (update first); a warning means it
-/// couldn't tell, or a newer optional version exists.
+/// couldn't tell (the player should know they may be missing an update), or a
+/// newer optional version exists.
 pub fn launch_check(pack: &Pack) -> Result<Option<String>, String> {
     if pack.update.is_none() {
         return Ok(None);

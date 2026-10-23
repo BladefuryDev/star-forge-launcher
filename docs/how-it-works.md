@@ -49,7 +49,7 @@ It logs what it did to the profile's `agent.log`.
 
 ## Limits
 
-- A file inside a `.pak` archive wins over a loose file at the same path, so
-  `files/` can't replace a single packed file without a client patch.
+- A file inside a `.pak` archive wins over a loose file at the same path,
+  unless the pack turns on the `loose-before-packed` core patch.
 - Patches are tied to one `game.exe` build; after a game update the launcher
   refuses them rather than misapplying them.

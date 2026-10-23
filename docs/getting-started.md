@@ -104,7 +104,7 @@ Common causes:
 - **"…signed with key X when you installed it, but this copy is signed with
   Y"**: an update didn't come from the same publisher. If the server really
   changed keys, remove the profile and install the pack again.
-- **"Could not check … for updates"**: the server's site is unreachable; the
-  game still starts with what you have.
+- **"Could not check … for updates"**: the server's site is unreachable, so
+  you may be missing an update; the game still starts with what you have.
 - **No window on Linux**: start the game from Steam once, and check that the
   Proton build in Settings exists.

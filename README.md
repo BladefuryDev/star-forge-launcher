@@ -28,7 +28,9 @@ on a Star Conflict server project.
   the SCMOD1 format other launchers use) and players download only what
   changed.
 - **Client patches** (experimental): byte patches applied to the game's memory
-  before it runs, checked against your `game.exe`, plus native plugins.
+  before it runs, checked against your `game.exe`, plus native plugins. Core
+  patches ship with the launcher, such as letting packs replace single files
+  inside `.pak` archives.
 - **Linux and Windows**: on Linux the game runs through the Proton build and
   prefix Steam uses, with the Steam overlay. The launcher updates itself.
 - **Command line**: `sc-launch` for scripts and for server teams' tooling.
@@ -71,8 +73,8 @@ Everything is indexed in [docs/](docs/README.md).
       checked against `game.exe` before launch, plus native plugins
 - [ ] `sfp build` for x64 sources (today client patchsets are written resolved)
 - [ ] x64 midhooks in the agent (C++-style hooks without a plugin)
-- [ ] Let `files/` override members of `.pak` archives (the engine prefers
-      packed files over loose ones; needs a VFS hook)
+- [x] Let `files/` override members of `.pak` archives (`loose-before-packed`
+      core patch)
 - [ ] Settle on patch methods beyond `inject` if needed
 - [ ] Export a profile as a pack zip from the launcher
 - [ ] Profile editor for patches and extra arguments in the UI
@@ -83,7 +85,7 @@ Everything is indexed in [docs/](docs/README.md).
       database); graphics settings and key bindings stay shared
 - [x] Servers can require a minimum pack version before players launch
 - [ ] Known publishers: ship server teams' keys with the launcher
-- [ ] Shared core patch library that packs switch on by name
+- [x] Core patches that ship with the launcher and packs switch on by id
 - [x] Packs can take their game files from a published file list (STAR FORGE
       JSON or SCMOD1), downloading only what changed
 

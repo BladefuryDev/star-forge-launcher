@@ -11,6 +11,30 @@ Patches live in the pack's `patches/` folder:
   `game.exe.patchset.toml`. One file per module.
 - `*.dll`: native plugins, listed in `pack.json` under `patches.plugins`.
 
+## Core patches
+
+Some patches are useful to many packs, so they ship with the launcher instead
+of every pack carrying the bytes. Their sources are in
+[`core-patches/`](../core-patches) in this repository. A pack turns them on by
+id:
+
+```json
+"patches": { "core": ["loose-before-packed"] }
+```
+
+They are applied exactly like a pack's own patchsets (checked against
+`game.exe`, memory only, before the pack's own), players can switch them off
+in `local.json` like any other patch, and the install review doesn't treat
+them as the pack's own code.
+
+| Id | What it does |
+|---|---|
+| `loose-before-packed` | Files in `files/` override files packed inside `.pak` archives. When the engine builds its file table it keeps the packed copy of a duplicate path; this makes it keep the loose copy instead, so a pack can replace single packed files such as `data/strings/<language>/string.txt`. A stock install has no duplicates, so without override files nothing changes. |
+
+New core patches are added by pull request: a patchset in
+`core-patches/<module>.patchset.toml` (with any assembly source next to it)
+and its id in the schema.
+
 ## Patchsets
 
 ```toml
@@ -93,11 +117,5 @@ profile folder.
 
 - Patchsets are tied to one `game.exe` build by its sha1; list that build in
   `requires.game` too, and check `agent.log` after a game update.
-- `files/` can't replace a single file inside a `.pak` archive on its own: when
-  the engine builds its file table it keeps the packed copy of a duplicate
-  path. A small `game.exe` patch, *loose-before-packed*, makes it keep the
-  loose copy instead, so a pack can override single packed files such as
-  `data/strings/<language>/string.txt`. Like every client patch it exists
-  only in memory while that profile's game runs, and a stock install has no
-  duplicates, so without override files nothing changes. It will be the first
-  entry in a shared library of core patches that packs switch on by name.
+- `files/` can't replace a single file inside a `.pak` archive unless the pack
+  turns on the `loose-before-packed` core patch.
