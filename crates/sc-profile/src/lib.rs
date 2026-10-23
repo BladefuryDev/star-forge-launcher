@@ -27,6 +27,11 @@ pub const SIGNATURE_FILE: &str = "manifest.sig";
 /// Folder inside a pack holding client patches: `<module>.patchset.toml`
 /// files (see the `sc-patch` crate) and native plugins.
 pub const PATCHES_DIR: &str = "patches";
+/// Files under `files/` the launcher writes itself (from `server.address`),
+/// never part of a pack's signature or file list.
+pub const GENERATED_FILES: [&str; 1] = ["data/address.cfg"];
+/// Record of the files a profile downloaded from its pack's `files_from` list.
+pub const REMOTE_RECORD: &str = "remote-files.json";
 /// Folder inside a profile holding the game's own per-user data for that
 /// profile (its `%LOCALAPPDATA%`): store cache, notes, local server database.
 /// Never part of a pack.
@@ -65,6 +70,10 @@ pub struct Pack {
     pub game: Game,
     #[serde(default, skip_serializing_if = "Branding::is_empty")]
     pub branding: Branding,
+    /// Game files downloaded from a published file list instead of shipped in
+    /// `files/`: only new or changed files are fetched on each update.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub files_from: Option<FilesFrom>,
     /// How the patchsets in `patches/` are applied. Experimental.
     #[serde(default, skip_serializing_if = "Patches::is_default")]
     pub patches: Patches,
@@ -184,6 +193,26 @@ mod one_or_many {
 impl Branding {
     fn is_empty(&self) -> bool {
         self.logo.is_none() && self.icon.is_none() && self.background.is_empty() && self.accent.is_none()
+    }
+}
+
+/// `files_from`: where a pack's game files are listed. Exactly one is set.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct FilesFrom {
+    /// A STAR FORGE file list: JSON, `{"files": {"path": {"sha256", "size"}}}`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manifest: Option<String>,
+    /// An `SCMOD1` list (tab-separated path, SHA-256, URL), as used by other
+    /// community launchers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scmod1: Option<String>,
+}
+
+impl FilesFrom {
+    /// The list's URL.
+    pub fn url(&self) -> &str {
+        self.manifest.as_deref().or(self.scmod1.as_deref()).unwrap_or_default()
     }
 }
 
@@ -363,6 +392,13 @@ impl Pack {
         if let Some(d) = &self.download {
             if d.sha256.len() != 64 || !d.sha256.chars().all(|c| c.is_ascii_hexdigit()) {
                 return err("download.sha256: expected a SHA-256 in hex".into());
+            }
+        }
+        if let Some(f) = &self.files_from {
+            match (&f.manifest, &f.scmod1) {
+                (Some(url), None) | (None, Some(url)) if url.starts_with("https://") || url.starts_with("http://") => {}
+                (Some(_), None) | (None, Some(_)) => return err("files_from: the list must be an http(s) link".into()),
+                _ => return err("files_from: set exactly one of manifest and scmod1".into()),
             }
         }
         for p in &self.patches.plugins {
@@ -672,6 +708,10 @@ mod tests {
         assert!(bad(r#"{"requires":{"game":["abc"]}}"#));
         assert!(!bad(r#"{"update":{"url":"https://a.org/pack.json","min_version":"1.0.0"}}"#));
         assert!(bad(r#"{"update":{"url":"https://a.org/pack.json","min_version":"soon"}}"#));
+        assert!(!bad(r#"{"files_from":{"scmod1":"https://a.org/manifest.txt"}}"#));
+        assert!(bad(r#"{"files_from":{}}"#));
+        assert!(bad(r#"{"files_from":{"manifest":"https://a.org/a.json","scmod1":"https://a.org/b.txt"}}"#));
+        assert!(bad(r#"{"files_from":{"manifest":"ftp://a.org/a.json"}}"#));
         assert!(bad(r#"{"patches":{"plugins":["../x.dll"]}}"#));
         assert!(bad(r#"{"patches":{"plugins":["patches/x.exe"]}}"#));
         assert!(Pack::from_json(r#"{"format":1,"id":"a","name":"a","version":"1.0.0","patches":{"method":"bake"}}"#).is_err());

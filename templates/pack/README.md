@@ -34,6 +34,38 @@ my-server/
 To try it while you work, import the folder itself:
 `sc-launch install path/to/my-server`.
 
+## Hosting game files as a list
+
+Instead of putting game files in `files/` and re-publishing the zip for every
+change, you can publish a list of them and let the launcher download only
+what changed. Lay out the changed files like the game folder and write the
+list:
+
+```sh
+sc-launch pack files my-files/ manifest.json --key my-server.key                  # STAR FORGE list
+sc-launch pack files my-files/ manifest.txt --base-url https://example.org/files/ # SCMOD1
+```
+
+Upload the files (next to a STAR FORGE list, or at `--base-url` for SCMOD1),
+the list, and its `.sig`. Then point the pack at it and leave out `files/`:
+
+```json
+"files_from": { "manifest": "https://example.org/files/manifest.json" }
+```
+
+or, for a list in the SCMOD1 format other community launchers use:
+
+```json
+"files_from": { "scmod1": "https://example.org/sc-mods/manifest.txt" }
+```
+
+The launcher checks every file against the list's SHA-256, keeps them in the
+player's profile (never the game folder), and refreshes them before each
+launch, so a changed file reaches players without a new pack version. If you
+sign the pack, sign the list with the same key (`--key`); the launcher refuses
+a signed pack whose list isn't. Paths in both formats are relative to the game
+folder. Both formats will keep working while the community settles on one.
+
 ## Publishing with updates
 
 Host two files over HTTPS: the zip, and a copy of `pack.json` with a

@@ -29,6 +29,8 @@ function parseReview(item) {
     plugins: number(value.plugins, 0, 1000),
     fileCount: number(value.fileCount, 0, Number.MAX_SAFE_INTEGER),
     files: array(value.files, string),
+    filesHost: text(value.filesHost),
+    downloadBytes: value.downloadBytes === null ? null : number(value.downloadBytes, 0, Number.MAX_SAFE_INTEGER),
     warnings: array(value.warnings, string),
     update: update && {
       profile: string(update.profile),
@@ -81,6 +83,10 @@ function renderReview(review) {
   fact('Starts', review.localServer ? 'Game and local server' : 'Game only');
   let files = `${review.fileCount} file${review.fileCount === 1 ? '' : 's'}`;
   if (review.update) files += ` (${review.update.filesAdded} new, ${review.update.filesRemoved} removed)`;
+  if (review.filesHost) {
+    files += `, downloaded from ${review.filesHost}`;
+    if (review.downloadBytes !== null) files += ` (${(review.downloadBytes / 1048576).toFixed(1)} MB)`;
+  }
   fact('Replaces game files', files);
   if (review.patches || review.update?.patches)
     fact('Game patches', review.update ? `${review.update.patches} → ${review.patches}` : String(review.patches));

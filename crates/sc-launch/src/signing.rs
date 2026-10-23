@@ -11,7 +11,7 @@
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
 use ed25519_dalek::{Signature as EdSignature, Signer, SigningKey, Verifier, VerifyingKey};
-use sc_profile::{FILES_DIR, MANIFEST_FILE, PACK_FILE, PATCHES_DIR, RESOURCES_DIR, SIGNATURE_FILE};
+use sc_profile::{FILES_DIR, GENERATED_FILES, MANIFEST_FILE, PACK_FILE, PATCHES_DIR, RESOURCES_DIR, SIGNATURE_FILE};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -127,8 +127,10 @@ pub enum Depth {
 }
 
 /// Every file that belongs to the pack, relative, with `/` separators, sorted.
-/// Dot files are left out, as when a pack is unpacked.
-pub fn pack_files(root: &Path) -> Result<Vec<String>, String> {
+/// Dot files are left out, as when a pack is unpacked, and so are the files
+/// the launcher writes itself. A pack whose game files come from a file list
+/// (`files_from`) has none of its own: that list is signed separately.
+pub fn pack_files(root: &Path, pack: &sc_profile::Pack) -> Result<Vec<String>, String> {
     fn walk(dir: &Path, rel: &str, out: &mut Vec<String>) -> Result<(), String> {
         let rd = match std::fs::read_dir(dir) {
             Ok(rd) => rd,
@@ -154,8 +156,12 @@ pub fn pack_files(root: &Path) -> Result<Vec<String>, String> {
         out.push(PACK_FILE.to_string());
     }
     for dir in [RESOURCES_DIR, FILES_DIR, PATCHES_DIR] {
+        if dir == FILES_DIR && pack.files_from.is_some() {
+            continue;
+        }
         walk(&root.join(dir), dir, &mut out)?;
     }
+    out.retain(|p| !GENERATED_FILES.iter().any(|g| p.strip_prefix(FILES_DIR).and_then(|r| r.strip_prefix('/')) == Some(g)));
     out.sort();
     Ok(out)
 }
@@ -167,12 +173,28 @@ fn entry_for(path: &Path) -> Result<Entry, String> {
     Ok(Entry { size, sha256: h.finalize().iter().map(|b| format!("{b:02x}")).collect() })
 }
 
+/// A detached signature over `bytes`, as written to a `.sig` file.
+pub fn sign_bytes(key: &SecretKey, bytes: &[u8]) -> String {
+    B64.encode(key.0.sign(bytes).to_bytes()) + "\n"
+}
+
+/// Checks a detached signature (the text of a `.sig` file) over `bytes`.
+pub fn verify_bytes(key: &PublicKey, bytes: &[u8], sig_text: &str) -> Result<(), String> {
+    let sig = B64
+        .decode(sig_text.trim())
+        .ok()
+        .and_then(|b| <[u8; 64]>::try_from(b).ok())
+        .map(|b| EdSignature::from_bytes(&b))
+        .ok_or("the signature is damaged")?;
+    key.0.verify(bytes, &sig).map_err(|_| "the signature does not match".to_string())
+}
+
 /// Writes `manifest.json` and `manifest.sig` for the pack in `root`.
 pub fn sign(root: &Path, key: &SecretKey) -> Result<Manifest, String> {
     let pack = crate::profiles::read_pack(root)?;
     pack.validate().map_err(|e| e.to_string())?;
     let mut files = BTreeMap::new();
-    for rel in pack_files(root)? {
+    for rel in pack_files(root, &pack)? {
         files.insert(rel.clone(), entry_for(&root.join(&rel))?);
     }
     let manifest = Manifest {
@@ -183,9 +205,8 @@ pub fn sign(root: &Path, key: &SecretKey) -> Result<Manifest, String> {
         files,
     };
     let bytes = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())? + "\n";
-    let sig = key.0.sign(bytes.as_bytes());
     crate::profiles::write_atomic(&root.join(MANIFEST_FILE), &bytes)?;
-    crate::profiles::write_atomic(&root.join(SIGNATURE_FILE), &(B64.encode(sig.to_bytes()) + "\n"))?;
+    crate::profiles::write_atomic(&root.join(SIGNATURE_FILE), &sign_bytes(key, bytes.as_bytes()))?;
     Ok(manifest)
 }
 
@@ -206,14 +227,7 @@ pub fn verify(root: &Path, depth: Depth) -> Result<Signature, String> {
     }
     let key = PublicKey::parse(&manifest.key).map_err(|e| format!("{MANIFEST_FILE}: key {e}"))?;
     let sig_text = std::fs::read_to_string(&sig_path).map_err(|e| format!("{SIGNATURE_FILE}: {e}"))?;
-    let sig = B64
-        .decode(sig_text.trim())
-        .ok()
-        .and_then(|b| <[u8; 64]>::try_from(b).ok())
-        .map(|b| EdSignature::from_bytes(&b))
-        .ok_or_else(|| format!("{SIGNATURE_FILE}: damaged"))?;
-    key.0
-        .verify(&bytes, &sig)
+    verify_bytes(&key, &bytes, &sig_text)
         .map_err(|_| format!("{SIGNATURE_FILE} does not match {MANIFEST_FILE}: the pack was changed after it was signed"))?;
 
     let pack = crate::profiles::read_pack(root)?;
@@ -223,7 +237,7 @@ pub fn verify(root: &Path, depth: Depth) -> Result<Signature, String> {
             manifest.id, manifest.version, pack.id, pack.version
         ));
     }
-    let present = pack_files(root)?;
+    let present = pack_files(root, &pack)?;
     if let Some(extra) = present.iter().find(|p| !manifest.files.contains_key(*p)) {
         return Err(format!("{extra} is not part of the signed pack"));
     }
@@ -290,6 +304,10 @@ mod tests {
         std::fs::write(dir.join("patches/game.exe.patchset.toml"), "y").unwrap();
         assert!(verify(&dir, Depth::Launch).is_err());
         std::fs::write(dir.join("patches/game.exe.patchset.toml"), "x").unwrap();
+
+        // The address file the launcher writes doesn't count.
+        std::fs::write(dir.join("files/data/address.cfg"), "set net_masterServerAddress \"a:1\"").unwrap();
+        assert!(verify(&dir, Depth::Full).is_ok());
 
         // Extra files can't be slipped in.
         std::fs::write(dir.join("patches/extra.patchset.toml"), "x").unwrap();

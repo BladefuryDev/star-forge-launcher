@@ -87,7 +87,7 @@ fn percent_decode(s: &str) -> Result<String, String> {
 }
 
 /// Packs come over HTTPS; plain HTTP only from this machine (for testing).
-fn check_url(url: &str) -> Result<(), String> {
+pub(crate) fn check_url(url: &str) -> Result<(), String> {
     if url.starts_with("https://") {
         return Ok(());
     }
@@ -118,6 +118,9 @@ pub struct Staged {
     pub trust: Trust,
     /// What the pack changes, for the review.
     pub reach: Reach,
+    /// The pack's `files_from` list, fetched and checked; its files are
+    /// downloaded on install.
+    pub remote: Option<crate::remote::FileList>,
     /// Paths under `files/`, with `/` separators, sorted.
     pub files: Vec<String>,
     /// Things worth telling the player that don't stop the install.
@@ -162,7 +165,7 @@ pub fn clear_staging() {
     }
 }
 
-fn new_staging_dir() -> Result<PathBuf, String> {
+pub(crate) fn new_staging_dir() -> Result<PathBuf, String> {
     static COUNTER: AtomicU32 = AtomicU32::new(0);
     let root = staging_root().ok_or("cannot work out the launcher data folder")?;
     let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis());
@@ -218,6 +221,15 @@ fn stage_into(source: &Source, dir: &Path) -> Result<Staged, String> {
     pack.validate().map_err(|e| e.to_string())?;
     let signature = signing::verify(&root, Depth::Full)?;
     let trust = trust::check(&pack.id, signature)?;
+    let remote = match &pack.files_from {
+        Some(from) => {
+            if root.join(FILES_DIR).exists() {
+                return Err(format!("the pack has both a {FILES_DIR}/ folder and files_from; use one or the other"));
+            }
+            Some(crate::remote::fetch_list(from, trust.key().as_ref()).map_err(|e| e.to_string())?)
+        }
+        None => None,
+    };
     let mut warnings = Vec::new();
     if let Some(published) = &published {
         if published.id != pack.id || published.version != pack.version {
@@ -263,7 +275,13 @@ fn stage_into(source: &Source, dir: &Path) -> Result<Staged, String> {
     for e in sets.iter().filter_map(|s| s.as_ref().err()) {
         warnings.push(format!("Broken patch file: {e}"));
     }
-    let reach = Reach::of(&root, &pack);
+    let mut reach = Reach::of(&root, &pack);
+    if let Some(list) = &remote {
+        reach.files = list.entries.len();
+        if !list.signed {
+            warnings.push(format!("Its game files come from {} without a signature; they are checked against the list's hashes only.", list.host()));
+        }
+    }
     if reach.runs_code() && trust == Trust::Unsigned {
         warnings.push(
             "This pack changes the game's code but isn't signed, so there is no telling who made it. Only install it from a source you trust.".into(),
@@ -282,7 +300,14 @@ fn stage_into(source: &Source, dir: &Path) -> Result<Staged, String> {
     if pack.update.is_none() {
         warnings.push("This pack has no update address, so the launcher can't check for new versions.".into());
     }
-    let files = file_list(&root);
+    let files = match &remote {
+        Some(list) => {
+            let mut paths: Vec<String> = list.entries.iter().map(|e| e.path.clone()).collect();
+            paths.sort();
+            paths
+        }
+        None => file_list(&root),
+    };
     Ok(Staged {
         dir: dir.to_path_buf(),
         root,
@@ -291,6 +316,7 @@ fn stage_into(source: &Source, dir: &Path) -> Result<Staged, String> {
         verified,
         trust,
         reach,
+        remote,
         files,
         warnings,
     })
@@ -323,12 +349,30 @@ pub fn discard(staged: Staged) {
     let _ = std::fs::remove_dir_all(staged.dir);
 }
 
+/// An installed pack.
+#[derive(Debug)]
+pub struct Installed {
+    /// The profile's folder name.
+    pub name: String,
+    /// Set when the pack installed but its listed game files didn't all
+    /// download; they are fetched again before the next launch.
+    pub warning: Option<String>,
+}
+
 /// Installs a reviewed pack: updates the profile that already has this pack id,
-/// or creates a new one. Returns the profile's folder name.
-pub fn install(staged: Staged, profiles_dir: &Path) -> Result<String, String> {
+/// or creates a new one, then downloads any listed game files.
+pub fn install(staged: Staged, profiles_dir: &Path) -> Result<Installed, String> {
     let result = install_inner(&staged, profiles_dir);
+    let remote = staged.remote.clone();
+    let pack_name = staged.pack.name.clone();
     discard(staged);
-    result
+    let name = result?;
+    let warning = remote.and_then(|list| {
+        crate::remote::sync(&profiles_dir.join(&name), &list)
+            .err()
+            .map(|e| format!("{pack_name} is installed, but its game files didn't all download ({e}). They'll be fetched again before you play."))
+    });
+    Ok(Installed { name, warning })
 }
 
 fn install_inner(staged: &Staged, profiles_dir: &Path) -> Result<String, String> {
@@ -369,19 +413,27 @@ pub fn verify_installed(profile_dir: &Path) -> Result<Trust, String> {
 const PACK_PARTS: [&str; 6] = [PACK_FILE, MANIFEST_FILE, SIGNATURE_FILE, RESOURCES_DIR, FILES_DIR, PATCHES_DIR];
 
 fn replace_pack(new_root: &Path, profile: &Path) -> Result<(), String> {
+    // A pack that downloads its files from a list keeps the ones it has, so
+    // an update only fetches what changed. Otherwise files/ is the pack's.
+    let new_listed = profiles::read_pack(new_root).is_ok_and(|p| p.files_from.is_some());
+    let old_listed = profiles::read_pack(profile).is_ok_and(|p| p.files_from.is_some());
+    let keep_files = new_listed && old_listed;
+    if !new_listed {
+        crate::remote::forget(profile);
+    }
     let old = profile.join(".update-old");
     let _ = std::fs::remove_dir_all(&old);
     std::fs::create_dir_all(&old).map_err(|e| format!("{}: {e}", old.display()))?;
     let mut moved_out = Vec::new();
     let mut moved_in = Vec::new();
     let result = (|| {
-        for part in PACK_PARTS {
+        for part in PACK_PARTS.into_iter().filter(|p| !(keep_files && *p == FILES_DIR)) {
             if profile.join(part).exists() {
                 std::fs::rename(profile.join(part), old.join(part)).map_err(|e| format!("{}: {e}", profile.join(part).display()))?;
                 moved_out.push(part);
             }
         }
-        for part in PACK_PARTS {
+        for part in PACK_PARTS.into_iter().filter(|p| !(keep_files && *p == FILES_DIR)) {
             if new_root.join(part).exists() {
                 std::fs::rename(new_root.join(part), profile.join(part)).map_err(|e| format!("{}: {e}", profile.join(part).display()))?;
                 moved_in.push(part);
@@ -466,7 +518,7 @@ fn looks_like_json(path: &Path) -> bool {
 }
 
 /// Downloads `url` to `dest`, at most `limit` bytes, optionally hashing it.
-fn fetch(url: &str, dest: &Path, limit: u64, mut hasher: Option<&mut Sha256>) -> Result<(), String> {
+pub(crate) fn fetch(url: &str, dest: &Path, limit: u64, mut hasher: Option<&mut Sha256>) -> Result<(), String> {
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(15))
         .timeout_read(Duration::from_secs(60))
@@ -495,7 +547,7 @@ fn fetch(url: &str, dest: &Path, limit: u64, mut hasher: Option<&mut Sha256>) ->
     Ok(())
 }
 
-fn hex(bytes: &[u8]) -> String {
+pub(crate) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
@@ -693,7 +745,7 @@ mod tests {
         let staged = stage(&Source::Path(v1)).unwrap();
         assert_eq!(staged.files, vec!["data/a.cfg", "data/old.cfg"]);
         assert!(!staged.verified);
-        let name = install(staged, &profiles_dir).unwrap();
+        let name = install(staged, &profiles_dir).unwrap().name;
         assert_eq!(name, "test-server");
         let dir = profiles_dir.join(&name);
         assert!(!dir.join("local.json").exists(), "packs can't ship player settings");
@@ -702,7 +754,7 @@ mod tests {
         profiles::write_local(&dir, &sc_profile::Local { name: Some("Mine".into()), ..Default::default() }).unwrap();
         let v2 = base.join("v2.zip");
         write_zip(&v2, &[("pack.json", &manifest("1.1.0")), ("files/data/a.cfg", "two")]);
-        let name2 = install(stage(&Source::Path(v2)).unwrap(), &profiles_dir).unwrap();
+        let name2 = install(stage(&Source::Path(v2)).unwrap(), &profiles_dir).unwrap().name;
         assert_eq!(name2, name, "same pack id updates in place");
         assert_eq!(std::fs::read_to_string(dir.join("files/data/a.cfg")).unwrap(), "two");
         assert!(!dir.join("files/data/old.cfg").exists());
@@ -742,7 +794,7 @@ mod tests {
         let staged = stage(&make("v1", "1.0.0", Some(&key))).unwrap();
         assert_eq!(staged.trust, Trust::NewKey(key.public()));
         assert!(staged.reach.runs_code());
-        let name = install(staged, &profiles_dir).unwrap();
+        let name = install(staged, &profiles_dir).unwrap().name;
         let dir = profiles_dir.join(&name);
         assert_eq!(verify_installed(&dir).unwrap(), Trust::Pinned(key.public()));
 

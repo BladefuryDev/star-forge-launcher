@@ -20,6 +20,12 @@ to **Unreleased** as you go and rename it to the version when you tag
   server database), so servers no longer see each other's cached data.
   Graphics settings and key bindings are still shared; turn it off per
   profile in the profile dialog
+- Packs can take their game files from a published file list instead of a
+  zip: either a STAR FORGE list (JSON) or an SCMOD1 list, the format other
+  community launchers use. Only new or changed files are downloaded, into the
+  profile, and they're refreshed before each launch. `sc-launch pack files`
+  writes either kind of list
+- The launcher's own `address.cfg` no longer trips a signed pack's check
 - Servers can require a minimum pack version (`update.min_version` in the
   published `pack.json`); older versions must update before playing
 

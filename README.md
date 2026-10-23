@@ -151,6 +151,8 @@ sc-launch update <profile>           # install the newest version of a profile's
 sc-launch pack check <pack>          # what a pack would do, checked like an install
 sc-launch pack keygen <key file>     # make a pack signing key (server teams)
 sc-launch pack sign <folder> --key <key file>   # sign a pack folder
+sc-launch pack files <folder> <list> [--base-url <url>] [--key <key file>]
+                                     # write a STAR FORGE or SCMOD1 file list
 ```
 
 ### Repository layout
@@ -213,7 +215,8 @@ pair and its own `plugins.updater.endpoints`.
 - [x] Servers can require a minimum pack version before players launch
 - [ ] Known publishers: ship server teams' keys with the launcher
 - [ ] Shared core patch library that packs switch on by name
-- [ ] Downloads that only fetch the files an update changed
+- [x] Packs can take their game files from a published file list (STAR FORGE
+      JSON or SCMOD1), downloading only what changed
 
 **Launcher**
 - [x] STAR FORGE's own logo, icon and default theme (v1)

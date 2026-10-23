@@ -22,6 +22,12 @@ FOR SERVER TEAMS:
   sc-launch pack check <zip|folder|url> Show what a pack would do and check it the
                                         way the launcher does, without installing
   sc-launch pack keygen <key file>      Make a pack signing key (keep it secret)
+  sc-launch pack files <folder> <list> [--base-url <url>] [--key <key file>]
+                                        Write a file list for the game files in
+                                        <folder> (laid out like the game folder):
+                                        <list> ending in .txt is SCMOD1 (needs
+                                        --base-url), otherwise STAR FORGE JSON. With
+                                        a key, also writes <list>.sig
   sc-launch pack sign <folder> --key <key file>
                                         Write manifest.json and manifest.sig for the
                                         pack in <folder>; the key can also come from
@@ -33,7 +39,8 @@ OPTIONS:
   --tools-dir <dir>      Folder with sc-inject.exe and sc_agent.dll (default: next to sc-launch)
   --proton <dir>         Proton build to use (Linux; default: the one that last ran the game)
   --yes                  Install without asking for confirmation
-  --key <file>           Pack signing key, for pack sign
+  --key <file>           Pack signing key, for pack sign and pack files
+  --base-url <url>       Where the files of a pack files list will be hosted
 
 ENVIRONMENT (used when the matching option is not given):
   STAR_FORGE_GAME_DIR, STAR_FORGE_TOOLS_DIR, STAR_FORGE_PROTON, STAR_FORGE_DATA_DIR
@@ -47,6 +54,7 @@ struct Cli {
     game_args: Vec<String>,
     yes: bool,
     key: Option<PathBuf>,
+    base_url: Option<String>,
 }
 
 fn parse() -> Result<Cli, String> {
@@ -57,6 +65,7 @@ fn parse() -> Result<Cli, String> {
         game_args: Vec::new(),
         yes: false,
         key: None,
+        base_url: None,
     };
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
@@ -67,6 +76,7 @@ fn parse() -> Result<Cli, String> {
             "--tools-dir" => cli.opts.tools_dir = Some(value(&a)?),
             "--proton" => cli.opts.proton = Some(value(&a)?),
             "--key" => cli.key = Some(value(&a)?),
+            "--base-url" => cli.base_url = Some(value(&a)?.to_string_lossy().into_owned()),
             "-h" | "--help" => cli.command = vec!["help".into()],
             "--yes" | "-y" => cli.yes = true,
             "--" => {
@@ -136,8 +146,12 @@ fn run() -> Result<u8, String> {
             let dir = profiles_dir.join(name);
             let profile = profiles::load(&dir)?;
             let trust = packs::verify_installed(&dir)?;
-            if let Some(warning) = packs::launch_check(&profiles::read_pack(&dir)?)? {
+            let pack = profiles::read_pack(&dir)?;
+            if let Some(warning) = packs::launch_check(&pack)? {
                 eprintln!("note: {warning}");
+            }
+            if let Some(note) = sc_launch::remote::launch_sync(&dir, &pack, trust.key().as_ref())? {
+                eprintln!("note: {note}");
             }
             let setup = launch::resolve(&cli.opts)?;
             if let Some(warning) = profiles::read_pack(&dir).ok().and_then(|p| packs::game_build_warning(&p, &setup.game_exe())) {
@@ -232,13 +246,20 @@ fn run() -> Result<u8, String> {
             println!("fingerprint: {}", key.public().fingerprint());
             Ok(0)
         }
+        ["pack", "files", folder, out] => {
+            let scmod1 = out.to_ascii_lowercase().ends_with(".txt");
+            let text = sc_launch::remote::build_list(std::path::Path::new(folder), cli.base_url.as_deref(), scmod1)?;
+            profiles::write_atomic(std::path::Path::new(out), &text)?;
+            let count = text.lines().filter(|l| l.contains("sha256") || l.contains('\t')).count();
+            println!("wrote {out}: {count} file(s), {}", if scmod1 { "SCMOD1" } else { "STAR FORGE list" });
+            if let Some(key) = signing_key(&cli, false)? {
+                profiles::write_atomic(std::path::Path::new(&format!("{out}.sig")), &signing::sign_bytes(&key, text.as_bytes()))?;
+                println!("signed it with key {} ({out}.sig); upload both", key.public().fingerprint());
+            }
+            Ok(0)
+        }
         ["pack", "sign", folder] => {
-            let text = match (&cli.key, std::env::var("STAR_FORGE_PACK_KEY")) {
-                (Some(path), _) => std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?,
-                (None, Ok(text)) => text,
-                (None, Err(_)) => return Err("pack sign needs --key <file> or STAR_FORGE_PACK_KEY".into()),
-            };
-            let key = signing::SecretKey::parse(&text)?;
+            let key = signing_key(&cli, true)?.expect("required");
             let manifest = signing::sign(std::path::Path::new(folder), &key)?;
             println!(
                 "signed {} {} ({} files) with key {}",
@@ -251,6 +272,17 @@ fn run() -> Result<u8, String> {
         }
         _ => Err("unknown command; see sc-launch --help".into()),
     }
+}
+
+/// The signing key from --key or STAR_FORGE_PACK_KEY.
+fn signing_key(cli: &Cli, required: bool) -> Result<Option<signing::SecretKey>, String> {
+    let text = match (&cli.key, std::env::var("STAR_FORGE_PACK_KEY")) {
+        (Some(path), _) => std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?,
+        (None, Ok(text)) => text,
+        (None, Err(_)) if required => return Err("this needs --key <file> or STAR_FORGE_PACK_KEY".into()),
+        (None, Err(_)) => return Ok(None),
+    };
+    signing::SecretKey::parse(&text).map(Some)
 }
 
 /// Writes a secret file readable only by its owner where that's possible.
@@ -287,8 +319,11 @@ fn install_reviewed(staged: packs::Staged, profiles_dir: &std::path::Path, yes: 
             return Ok(1);
         }
     }
-    let name = packs::install(staged, profiles_dir)?;
-    println!("installed as profile {name}");
+    let installed = packs::install(staged, profiles_dir)?;
+    println!("installed as profile {}", installed.name);
+    if let Some(w) = installed.warning {
+        eprintln!("warning: {w}");
+    }
     Ok(0)
 }
 
@@ -307,7 +342,15 @@ fn print_review(staged: &packs::Staged, existing: Option<&sc_profile::Pack>) {
     if pack.server.local {
         println!("  starts the local server with the game");
     }
-    println!("  replaces {} game file(s)", staged.files.len());
+    match &staged.remote {
+        Some(list) => println!(
+            "  replaces {} game file(s), downloaded from {}{}",
+            staged.files.len(),
+            list.host(),
+            list.bytes().map(|b| format!(" ({:.1} MB)", b as f64 / 1048576.0)).unwrap_or_default()
+        ),
+        None => println!("  replaces {} game file(s)", staged.files.len()),
+    }
     for f in staged.files.iter().take(20) {
         println!("    {f}");
     }

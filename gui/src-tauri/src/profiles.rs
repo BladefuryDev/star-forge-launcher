@@ -343,6 +343,10 @@ pub struct PackReview {
     plugins: usize,
     file_count: usize,
     files: Vec<String>,
+    /// Host the game files are downloaded from, for packs with a file list.
+    files_host: Option<String>,
+    /// Their total size, when the list says.
+    download_bytes: Option<u64>,
     warnings: Vec<String>,
     /// Set when this pack is already installed and would be updated.
     update: Option<PackUpdate>,
@@ -405,6 +409,8 @@ fn review_of(token: u64, staged: &packs::Staged, game_exe: Option<PathBuf>) -> R
         plugins: patching.plugins,
         file_count: staged.files.len(),
         files: staged.files.iter().take(FILES_SHOWN).cloned().collect(),
+        files_host: staged.remote.as_ref().map(|l| l.host().to_string()),
+        download_bytes: staged.remote.as_ref().and_then(|l| l.bytes()),
         warnings,
         update,
     })
@@ -445,9 +451,13 @@ pub async fn install_pack(app: AppHandle, token: u64) -> Result<String, String> 
         .remove(&token)
         .ok_or("This pack review has expired; open the pack again.")?;
     let root = profiles_dir()?;
-    let id = tauri::async_runtime::spawn_blocking(move || packs::install(staged, &root))
+    let installed = tauri::async_runtime::spawn_blocking(move || packs::install(staged, &root))
         .await
         .map_err(|e| e.to_string())??;
+    if let Some(w) = installed.warning {
+        crate::notify(&app, w, crate::NotificationLevel::Error);
+    }
+    let id = installed.name;
     crate::prefs::modify(&app, |p| p.selected_profile = id.clone())?;
     Ok(id)
 }

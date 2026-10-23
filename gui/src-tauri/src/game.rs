@@ -171,9 +171,13 @@ fn start_game(app: &AppHandle) -> Result<(), String> {
     if let Some(warning) = profiles::read_pack(&dir).ok().and_then(|p| sc_launch::packs::game_build_warning(&p, &setup.game_exe())) {
         notify(app, warning, NotificationLevel::Info);
     }
-    sc_launch::packs::verify_installed(&dir)?;
-    if let Some(warning) = sc_launch::packs::launch_check(&profiles::read_pack(&dir)?)? {
+    let trust = sc_launch::packs::verify_installed(&dir)?;
+    let pack = profiles::read_pack(&dir)?;
+    if let Some(warning) = sc_launch::packs::launch_check(&pack)? {
         notify(app, warning, NotificationLevel::Info);
+    }
+    if let Some(note) = sc_launch::remote::launch_sync(&dir, &pack, trust.key().as_ref())? {
+        notify(app, note, NotificationLevel::Info);
     }
     for warning in sc_launch::patching::preflight(&dir, &profile, &setup.game_exe())? {
         notify(app, warning, NotificationLevel::Info);
