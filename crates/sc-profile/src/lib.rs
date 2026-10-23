@@ -20,6 +20,10 @@ pub const LOCAL_FILE: &str = "local.json";
 pub const FILES_DIR: &str = "files";
 /// Folder inside a pack holding launcher artwork.
 pub const RESOURCES_DIR: &str = "resources";
+/// Signed list of every file in a pack and its SHA-256 (see `sc_launch::signing`).
+pub const MANIFEST_FILE: &str = "manifest.json";
+/// Detached ed25519 signature over the exact bytes of [`MANIFEST_FILE`].
+pub const SIGNATURE_FILE: &str = "manifest.sig";
 /// Folder inside a pack holding client patches: `<module>.patchset.toml`
 /// files (see the `sc-patch` crate) and native plugins.
 pub const PATCHES_DIR: &str = "patches";

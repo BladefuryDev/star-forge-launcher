@@ -5,9 +5,15 @@
 //! into a staging folder first so the player can review it, then moved into
 //! the profiles folder. Updating replaces the pack's own files and keeps the
 //! player's `local.json`.
+//!
+//! A signed pack (see [`crate::signing`]) is checked file by file against its
+//! signature, and its key must match the one pinned to the pack id (see
+//! [`crate::trust`]); the pinned key is checked again before every launch.
 
 use crate::profiles;
-use sc_profile::{Pack, FILES_DIR, PACK_FILE, PATCHES_DIR, RESOURCES_DIR};
+use crate::signing::{self, Depth};
+use crate::trust::{self, Trust};
+use sc_profile::{Pack, FILES_DIR, MANIFEST_FILE, PACK_FILE, PATCHES_DIR, RESOURCES_DIR, SIGNATURE_FILE};
 use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -108,10 +114,40 @@ pub struct Staged {
     pub origin: String,
     /// Whether the download matched the SHA-256 in a published `pack.json`.
     pub verified: bool,
+    /// Who signed it, if anyone, and whether that key is already trusted.
+    pub trust: Trust,
+    /// What the pack changes, for the review.
+    pub reach: Reach,
     /// Paths under `files/`, with `/` separators, sorted.
     pub files: Vec<String>,
     /// Things worth telling the player that don't stop the install.
     pub warnings: Vec<String>,
+}
+
+/// What a pack can change, from least to most powerful.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Reach {
+    /// Files the game reads (data, scripts, configs) under `files/`.
+    pub files: usize,
+    /// Patchsets that change the game's code in memory.
+    pub patchsets: usize,
+    /// Native DLLs loaded into the game.
+    pub plugins: usize,
+}
+
+impl Reach {
+    pub fn of(root: &Path, pack: &Pack) -> Reach {
+        Reach {
+            files: file_list(root).len(),
+            patchsets: sc_profile::patchset_files(root).len(),
+            plugins: pack.patches.plugins.len(),
+        }
+    }
+
+    /// Whether the pack changes the game's code, not just its data.
+    pub fn runs_code(&self) -> bool {
+        self.patchsets > 0 || self.plugins > 0
+    }
 }
 
 /// Folder for packs being reviewed, under the launcher data folder.
@@ -180,6 +216,8 @@ fn stage_into(source: &Source, dir: &Path) -> Result<Staged, String> {
     let root = find_root(&content)?;
     let mut pack = profiles::read_pack(&root)?;
     pack.validate().map_err(|e| e.to_string())?;
+    let signature = signing::verify(&root, Depth::Full)?;
+    let trust = trust::check(&pack.id, signature)?;
     let mut warnings = Vec::new();
     if let Some(published) = &published {
         if published.id != pack.id || published.version != pack.version {
@@ -188,15 +226,19 @@ fn stage_into(source: &Source, dir: &Path) -> Result<Staged, String> {
                 published.id, published.version, pack.id, pack.version
             ));
         }
-        // Installed from a published pack.json: check that same address for updates.
-        if pack.update.is_none() {
+        // Installed from a published pack.json: check that same address for
+        // updates. A signed pack.json can't be edited, so it must name it itself.
+        if pack.update.is_none() && trust == Trust::Unsigned {
             if let Source::Url(url) = source {
                 pack.update = Some(sc_profile::Update { url: url.clone() });
             }
         }
     }
-    pack.download = None;
-    profiles::write_pack(&root, &pack)?;
+    // Signed packs stay byte for byte as signed.
+    if trust == Trust::Unsigned {
+        pack.download = None;
+        profiles::write_pack(&root, &pack)?;
+    }
 
     if let Some(min) = &pack.requires.launcher {
         let need = sc_profile::parse_version(min).ok_or_else(|| format!("requires.launcher {min:?}: expected x.y.z"))?;
@@ -221,8 +263,11 @@ fn stage_into(source: &Source, dir: &Path) -> Result<Staged, String> {
     for e in sets.iter().filter_map(|s| s.as_ref().err()) {
         warnings.push(format!("Broken patch file: {e}"));
     }
-    if !sets.is_empty() {
-        warnings.push("This pack patches the game's code while it runs. Patch support is experimental.".into());
+    let reach = Reach::of(&root, &pack);
+    if reach.runs_code() && trust == Trust::Unsigned {
+        warnings.push(
+            "This pack changes the game's code but isn't signed, so there is no telling who made it. Only install it from a source you trust.".into(),
+        );
     }
     for p in &pack.patches.plugins {
         if !sc_profile::patches_rel(p).is_some_and(|rel| root.join(PATCHES_DIR).join(rel).is_file()) {
@@ -244,6 +289,8 @@ fn stage_into(source: &Source, dir: &Path) -> Result<Staged, String> {
         pack,
         origin,
         verified,
+        trust,
+        reach,
         files,
         warnings,
     })
@@ -286,18 +333,40 @@ pub fn install(staged: Staged, profiles_dir: &Path) -> Result<String, String> {
 
 fn install_inner(staged: &Staged, profiles_dir: &Path) -> Result<String, String> {
     std::fs::create_dir_all(profiles_dir).map_err(|e| format!("{}: {e}", profiles_dir.display()))?;
-    if let Some(existing) = profiles::find_pack(profiles_dir, &staged.pack.id) {
+    // Checked again: another install may have pinned a key since the review.
+    let trust = trust::check(&staged.pack.id, staged.trust.key().map_or(signing::Signature::Unsigned, signing::Signature::Signed))?;
+    let name = if let Some(existing) = profiles::find_pack(profiles_dir, &staged.pack.id) {
         replace_pack(&staged.root, &existing)?;
-        return Ok(existing.file_name().unwrap().to_string_lossy().into_owned());
+        existing.file_name().unwrap().to_string_lossy().into_owned()
+    } else {
+        let name = profiles::free_name(profiles_dir, &staged.pack.name);
+        let target = profiles_dir.join(&name);
+        std::fs::rename(&staged.root, &target).map_err(|e| format!("{}: {e}", target.display()))?;
+        name
+    };
+    if let Trust::NewKey(key) = trust {
+        trust::pin(&staged.pack.id, &key)?;
     }
-    let name = profiles::free_name(profiles_dir, &staged.pack.name);
-    let target = profiles_dir.join(&name);
-    std::fs::rename(&staged.root, &target).map_err(|e| format!("{}: {e}", target.display()))?;
     Ok(name)
 }
 
+/// Checks an installed pack before it starts: its files against its
+/// signature (code fully, `files/` by size) and its key against the pinned
+/// one. A signed pack installed without the launcher gets its key pinned here.
+pub fn verify_installed(profile_dir: &Path) -> Result<Trust, String> {
+    let pack = profiles::read_pack(profile_dir)?;
+    let signature = signing::verify(profile_dir, Depth::Launch)
+        .map_err(|e| format!("{}: {e}. Reinstall the pack to repair it.", pack.name))?;
+    let trust = trust::check(&pack.id, signature)?;
+    if let Trust::NewKey(key) = trust {
+        trust::pin(&pack.id, &key)?;
+        return Ok(Trust::Pinned(key));
+    }
+    Ok(trust)
+}
+
 /// The parts of a profile folder that belong to the pack.
-const PACK_PARTS: [&str; 4] = [PACK_FILE, RESOURCES_DIR, FILES_DIR, PATCHES_DIR];
+const PACK_PARTS: [&str; 6] = [PACK_FILE, MANIFEST_FILE, SIGNATURE_FILE, RESOURCES_DIR, FILES_DIR, PATCHES_DIR];
 
 fn replace_pack(new_root: &Path, profile: &Path) -> Result<(), String> {
     let old = profile.join(".update-old");
@@ -435,6 +504,8 @@ fn allowed(rel: &str) -> bool {
         return false; // .gitkeep, .DS_Store, ...
     }
     rel == PACK_FILE
+        || rel == MANIFEST_FILE
+        || rel == SIGNATURE_FILE
         || ((top == RESOURCES_DIR || top == FILES_DIR || top == PATCHES_DIR) && !file)
         || (file && ["readme", "license", "changelog"].iter().any(|p| top.to_ascii_lowercase().starts_with(p)))
 }
@@ -578,7 +649,7 @@ mod tests {
         let base = std::env::temp_dir().join(format!("sf-packs-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        std::env::set_var(crate::env::DATA_DIR, base.join("data"));
+        crate::test_data_dir();
         let profiles_dir = base.join("profiles");
         let manifest = |v: &str| {
             format!(r#"{{"format":1,"id":"org.example.test","name":"Test Server","version":"{v}","server":{{"address":"a.org:1"}}}}"#)
@@ -615,6 +686,48 @@ mod tests {
         let bad = base.join("bad.zip");
         write_zip(&bad, &[("readme.txt", "no manifest")]);
         assert!(stage(&Source::Path(bad)).is_err());
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn signed_packs_keep_their_key() {
+        crate::test_data_dir();
+        let base = std::env::temp_dir().join(format!("sf-signed-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let profiles_dir = base.join("profiles");
+        let make = |name: &str, version: &str, key: Option<&signing::SecretKey>| {
+            let dir = base.join(name);
+            std::fs::create_dir_all(dir.join("patches")).unwrap();
+            std::fs::write(
+                dir.join(PACK_FILE),
+                format!(r#"{{"format":1,"id":"org.example.signed","name":"Signed","version":"{version}"}}"#),
+            )
+            .unwrap();
+            std::fs::write(dir.join("patches/game.exe.patchset.toml"), "x").unwrap();
+            if let Some(key) = key {
+                signing::sign(&dir, key).unwrap();
+            }
+            Source::Path(dir)
+        };
+        let key = signing::SecretKey::generate().unwrap();
+        let other = signing::SecretKey::generate().unwrap();
+
+        let staged = stage(&make("v1", "1.0.0", Some(&key))).unwrap();
+        assert_eq!(staged.trust, Trust::NewKey(key.public()));
+        assert!(staged.reach.runs_code());
+        let name = install(staged, &profiles_dir).unwrap();
+        let dir = profiles_dir.join(&name);
+        assert_eq!(verify_installed(&dir).unwrap(), Trust::Pinned(key.public()));
+
+        assert!(stage(&make("v2-other", "1.1.0", Some(&other))).is_err(), "another key can't update it");
+        assert!(stage(&make("v2-unsigned", "1.1.0", None)).is_err(), "nor an unsigned copy");
+        let v2 = stage(&make("v2", "1.1.0", Some(&key))).unwrap();
+        assert_eq!(v2.trust, Trust::Pinned(key.public()));
+        install(v2, &profiles_dir).unwrap();
+
+        std::fs::write(dir.join("patches/game.exe.patchset.toml"), "tampered").unwrap();
+        assert!(verify_installed(&dir).is_err());
+        trust::unpin("org.example.signed").unwrap();
         std::fs::remove_dir_all(&base).unwrap();
     }
 }

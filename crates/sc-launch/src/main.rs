@@ -1,4 +1,4 @@
-use sc_launch::{launch, packs, profiles};
+use sc_launch::{launch, packs, profiles, signing, trust::Trust};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -18,12 +18,22 @@ USAGE:
   sc-launch [OPTIONS] update <profile> [--yes]
                                         Install the newest version of a profile's pack
 
+FOR SERVER TEAMS:
+  sc-launch pack check <zip|folder|url> Show what a pack would do and check it the
+                                        way the launcher does, without installing
+  sc-launch pack keygen <key file>      Make a pack signing key (keep it secret)
+  sc-launch pack sign <folder> --key <key file>
+                                        Write manifest.json and manifest.sig for the
+                                        pack in <folder>; the key can also come from
+                                        STAR_FORGE_PACK_KEY (the key file's text)
+
 OPTIONS:
   --profiles-dir <dir>   Profile folder (default: the per-user data folder)
   --game-dir <dir>       Star Conflict install (default: found through Steam)
   --tools-dir <dir>      Folder with sc-inject.exe and sc_agent.dll (default: next to sc-launch)
   --proton <dir>         Proton build to use (Linux; default: the one that last ran the game)
   --yes                  Install without asking for confirmation
+  --key <file>           Pack signing key, for pack sign
 
 ENVIRONMENT (used when the matching option is not given):
   STAR_FORGE_GAME_DIR, STAR_FORGE_TOOLS_DIR, STAR_FORGE_PROTON, STAR_FORGE_DATA_DIR
@@ -36,6 +46,7 @@ struct Cli {
     command: Vec<String>,
     game_args: Vec<String>,
     yes: bool,
+    key: Option<PathBuf>,
 }
 
 fn parse() -> Result<Cli, String> {
@@ -45,6 +56,7 @@ fn parse() -> Result<Cli, String> {
         command: Vec::new(),
         game_args: Vec::new(),
         yes: false,
+        key: None,
     };
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
@@ -54,6 +66,7 @@ fn parse() -> Result<Cli, String> {
             "--game-dir" => cli.opts.game_dir = Some(value(&a)?),
             "--tools-dir" => cli.opts.tools_dir = Some(value(&a)?),
             "--proton" => cli.opts.proton = Some(value(&a)?),
+            "--key" => cli.key = Some(value(&a)?),
             "-h" | "--help" => cli.command = vec!["help".into()],
             "--yes" | "-y" => cli.yes = true,
             "--" => {
@@ -122,6 +135,7 @@ fn run() -> Result<u8, String> {
             }
             let dir = profiles_dir.join(name);
             let profile = profiles::load(&dir)?;
+            let trust = packs::verify_installed(&dir)?;
             let setup = launch::resolve(&cli.opts)?;
             if let Some(warning) = profiles::read_pack(&dir).ok().and_then(|p| packs::game_build_warning(&p, &setup.game_exe())) {
                 eprintln!("warning: {warning}");
@@ -131,9 +145,10 @@ fn run() -> Result<u8, String> {
             }
             let mut cmd = launch::command(&setup, &dir, &cli.game_args)?;
             println!(
-                "starting {} with profile {name}{}",
+                "starting {} with profile {name}{} ({})",
                 setup.game_exe().display(),
-                profile.server.as_deref().map(|s| format!(" (server {s})")).unwrap_or_default()
+                profile.server.as_deref().map(|s| format!(" (server {s})")).unwrap_or_default(),
+                describe_trust(&trust)
             );
             let status = cmd.status().map_err(|e| format!("could not start the injector: {e}"))?;
             println!("agent log: {}", dir.join(sc_profile::AGENT_LOG).display());
@@ -175,22 +190,111 @@ fn run() -> Result<u8, String> {
                 Some(a) => install_reviewed(packs::stage(&packs::Source::Url(a.url))?, &profiles_dir, cli.yes),
             }
         }
+        ["pack", "check", source] => {
+            let staged = packs::stage(&packs::Source::parse(source)?)?;
+            let existing = profiles::find_pack(&profiles_dir, &staged.pack.id).and_then(|d| profiles::read_pack(&d).ok());
+            print_review(&staged, existing.as_ref());
+            let mut problems: Vec<String> = sc_launch::patching::load_sets(&staged.root).into_iter().filter_map(Result::err).collect();
+            match launch::find_game(&cli.opts) {
+                Ok(game_dir) => {
+                    let profile = sc_profile::Profile::new(&staged.pack, &Default::default());
+                    match sc_launch::patching::preflight(&staged.root, &profile, &game_dir.join("win64").join("game.exe")) {
+                        Ok(warnings) => warnings.iter().for_each(|w| println!("  note: {w}")),
+                        Err(e) => problems.push(e),
+                    }
+                }
+                Err(e) => println!("  (patches not checked against the game: {e})"),
+            }
+            packs::discard(staged);
+            for p in &problems {
+                println!("  problem: {p}");
+            }
+            println!("{}", if problems.is_empty() { "pack OK" } else { "pack has problems" });
+            Ok(u8::from(!problems.is_empty()))
+        }
+        ["pack", "keygen", file] => {
+            let path = PathBuf::from(file);
+            if path.exists() {
+                return Err(format!("{file} already exists; not overwriting a key"));
+            }
+            let key = signing::SecretKey::generate()?;
+            write_secret(&path, &key.to_text())?;
+            println!("signing key written to {file}; keep it secret and backed up");
+            println!("public key:  {}", key.public());
+            println!("fingerprint: {}", key.public().fingerprint());
+            Ok(0)
+        }
+        ["pack", "sign", folder] => {
+            let text = match (&cli.key, std::env::var("STAR_FORGE_PACK_KEY")) {
+                (Some(path), _) => std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?,
+                (None, Ok(text)) => text,
+                (None, Err(_)) => return Err("pack sign needs --key <file> or STAR_FORGE_PACK_KEY".into()),
+            };
+            let key = signing::SecretKey::parse(&text)?;
+            let manifest = signing::sign(std::path::Path::new(folder), &key)?;
+            println!(
+                "signed {} {} ({} files) with key {}",
+                manifest.id,
+                manifest.version,
+                manifest.files.len(),
+                key.public().fingerprint()
+            );
+            Ok(0)
+        }
         _ => Err("unknown command; see sc-launch --help".into()),
+    }
+}
+
+/// Writes a secret file readable only by its owner where that's possible.
+fn write_secret(path: &std::path::Path, text: &str) -> Result<(), String> {
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    let mut f = options.open(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    std::io::Write::write_all(&mut f, text.as_bytes()).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+fn describe_trust(trust: &Trust) -> String {
+    match trust {
+        Trust::Unsigned => "not signed".into(),
+        Trust::NewKey(k) => format!("signed with a new key {}", k.fingerprint()),
+        Trust::Pinned(k) => format!("signed by its publisher, key {}", k.fingerprint()),
+        Trust::Known { name, key } => format!("signed by {name}, key {}", key.fingerprint()),
     }
 }
 
 /// Shows what a pack will do and installs it once the user agrees.
 fn install_reviewed(staged: packs::Staged, profiles_dir: &std::path::Path, yes: bool) -> Result<u8, String> {
+    let existing = profiles::find_pack(profiles_dir, &staged.pack.id).and_then(|d| profiles::read_pack(&d).ok());
+    print_review(&staged, existing.as_ref());
+    if !yes {
+        print!("Install? [y/N] ");
+        std::io::Write::flush(&mut std::io::stdout()).ok();
+        let mut answer = String::new();
+        std::io::stdin().read_line(&mut answer).map_err(|e| e.to_string())?;
+        if !matches!(answer.trim(), "y" | "Y" | "yes") {
+            packs::discard(staged);
+            println!("not installed");
+            return Ok(1);
+        }
+    }
+    let name = packs::install(staged, profiles_dir)?;
+    println!("installed as profile {name}");
+    Ok(0)
+}
+
+fn print_review(staged: &packs::Staged, existing: Option<&sc_profile::Pack>) {
     let pack = &staged.pack;
-    let existing = profiles::find_pack(profiles_dir, &pack.id).and_then(|d| profiles::read_pack(&d).ok());
     println!("{} {} ({})", pack.name, pack.version, pack.id);
-    if let Some(old) = &existing {
+    if let Some(old) = existing {
         println!("  updates the installed version {}", old.version);
     }
     if !pack.authors.is_empty() {
         println!("  by {}", pack.authors.join(", "));
     }
     println!("  from {}{}", staged.origin, if staged.verified { " (checksum verified)" } else { "" });
+    println!("  {}", describe_trust(&staged.trust));
     println!("  server:  {}", pack.server.address.as_deref().unwrap_or("game default"));
     if pack.server.local {
         println!("  starts the local server with the game");
@@ -215,20 +319,6 @@ fn install_reviewed(staged: packs::Staged, profiles_dir: &std::path::Path, yes: 
     for w in &staged.warnings {
         println!("  note: {w}");
     }
-    if !yes {
-        print!("Install? [y/N] ");
-        std::io::Write::flush(&mut std::io::stdout()).ok();
-        let mut answer = String::new();
-        std::io::stdin().read_line(&mut answer).map_err(|e| e.to_string())?;
-        if !matches!(answer.trim(), "y" | "Y" | "yes") {
-            packs::discard(staged);
-            println!("not installed");
-            return Ok(1);
-        }
-    }
-    let name = packs::install(staged, profiles_dir)?;
-    println!("installed as profile {name}");
-    Ok(0)
 }
 
 fn main() -> ExitCode {
