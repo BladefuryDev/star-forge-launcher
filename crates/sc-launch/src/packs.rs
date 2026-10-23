@@ -230,7 +230,7 @@ fn stage_into(source: &Source, dir: &Path) -> Result<Staged, String> {
         // updates. A signed pack.json can't be edited, so it must name it itself.
         if pack.update.is_none() && trust == Trust::Unsigned {
             if let Source::Url(url) = source {
-                pack.update = Some(sc_profile::Update { url: url.clone() });
+                pack.update = Some(sc_profile::Update { url: url.clone(), min_version: None });
             }
         }
     }
@@ -407,6 +407,8 @@ fn replace_pack(new_root: &Path, profile: &Path) -> Result<(), String> {
 pub struct Available {
     pub version: String,
     pub url: String,
+    /// The server no longer accepts the installed version.
+    pub required: bool,
 }
 
 /// Asks the pack's update address whether there is a newer version.
@@ -421,8 +423,33 @@ pub fn check_update(pack: &Pack) -> Result<Option<Available>, String> {
     if published.id != pack.id {
         return Err(format!("{}: publishes pack {} instead of {}", update.url, published.id, pack.id));
     }
-    let newer = sc_profile::parse_version(&published.version) > sc_profile::parse_version(&pack.version);
-    Ok(newer.then(|| Available { version: published.version, url: update.url.clone() }))
+    let have = sc_profile::parse_version(&pack.version);
+    let newer = sc_profile::parse_version(&published.version) > have;
+    let required = published
+        .update
+        .as_ref()
+        .and_then(|u| u.min_version.as_deref())
+        .and_then(sc_profile::parse_version)
+        .is_some_and(|min| have < Some(min));
+    Ok(newer.then(|| Available { version: published.version, url: update.url.clone(), required }))
+}
+
+/// Before a launch: asks the pack's server whether the installed version is
+/// still accepted. `Err` means it isn't (update first); a warning means it
+/// couldn't tell, or a newer optional version exists.
+pub fn launch_check(pack: &Pack) -> Result<Option<String>, String> {
+    if pack.update.is_none() {
+        return Ok(None);
+    }
+    match check_update(pack) {
+        Ok(Some(a)) if a.required => Err(format!(
+            "{}'s server needs pack version {} or newer (you have {}). Update the pack first.",
+            pack.name, a.version, pack.version
+        )),
+        Ok(Some(a)) => Ok(Some(format!("{} {} is available.", pack.name, a.version))),
+        Ok(None) => Ok(None),
+        Err(e) => Ok(Some(format!("Could not check {} for updates: {e}", pack.name))),
+    }
 }
 
 fn read_published(path: &Path, url: &str) -> Result<Pack, String> {

@@ -136,6 +136,9 @@ fn run() -> Result<u8, String> {
             let dir = profiles_dir.join(name);
             let profile = profiles::load(&dir)?;
             let trust = packs::verify_installed(&dir)?;
+            if let Some(warning) = packs::launch_check(&profiles::read_pack(&dir)?)? {
+                eprintln!("note: {warning}");
+            }
             let setup = launch::resolve(&cli.opts)?;
             if let Some(warning) = profiles::read_pack(&dir).ok().and_then(|p| packs::game_build_warning(&p, &setup.game_exe())) {
                 eprintln!("warning: {warning}");

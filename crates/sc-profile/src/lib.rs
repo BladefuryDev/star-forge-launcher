@@ -193,6 +193,10 @@ impl Branding {
 pub struct Update {
     /// URL of the published `pack.json` (the copy with `download` filled in).
     pub url: String,
+    /// In the published copy: the oldest version the server still accepts.
+    /// Players on anything older must update before the launcher starts the game.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_version: Option<String>,
 }
 
 /// The pack's zip, in the published `pack.json`.
@@ -349,6 +353,11 @@ impl Pack {
         for h in &self.requires.game {
             if h.len() != 64 || !h.chars().all(|c| c.is_ascii_hexdigit()) {
                 return err(format!("requires.game {h:?}: expected a SHA-256 in hex"));
+            }
+        }
+        if let Some(min) = self.update.as_ref().and_then(|u| u.min_version.as_ref()) {
+            if parse_version(min).is_none() {
+                return err(format!("update.min_version {min:?}: expected x.y.z"));
             }
         }
         if let Some(d) = &self.download {
@@ -661,6 +670,8 @@ mod tests {
         assert!(!bad(r#"{"branding":{"background":["resources/a.jpg","resources/b.jpg"]}}"#));
         assert!(bad(r#"{"branding":{"background":["resources/a.jpg","../b.jpg"]}}"#));
         assert!(bad(r#"{"requires":{"game":["abc"]}}"#));
+        assert!(!bad(r#"{"update":{"url":"https://a.org/pack.json","min_version":"1.0.0"}}"#));
+        assert!(bad(r#"{"update":{"url":"https://a.org/pack.json","min_version":"soon"}}"#));
         assert!(bad(r#"{"patches":{"plugins":["../x.dll"]}}"#));
         assert!(bad(r#"{"patches":{"plugins":["patches/x.exe"]}}"#));
         assert!(Pack::from_json(r#"{"format":1,"id":"a","name":"a","version":"1.0.0","patches":{"method":"bake"}}"#).is_err());

@@ -172,6 +172,9 @@ fn start_game(app: &AppHandle) -> Result<(), String> {
         notify(app, warning, NotificationLevel::Info);
     }
     sc_launch::packs::verify_installed(&dir)?;
+    if let Some(warning) = sc_launch::packs::launch_check(&profiles::read_pack(&dir)?)? {
+        notify(app, warning, NotificationLevel::Info);
+    }
     for warning in sc_launch::patching::preflight(&dir, &profile, &setup.game_exe())? {
         notify(app, warning, NotificationLevel::Info);
     }
@@ -257,10 +260,14 @@ pub fn perform_launcher_action(app: AppHandle, action: String) -> Result<(), Str
         }
         ("launch", Phase::Ready) => {
             update(&app, |s| s.phase = Some(Phase::Launching));
-            start_game(&app).inspect_err(|e| {
-                update(&app, |s| s.phase = Some(Phase::Ready));
-                notify(&app, e.clone(), NotificationLevel::Error);
-            })
+            // Off the main thread: checks hash the pack and may ask its server.
+            std::thread::spawn(move || {
+                if let Err(e) = start_game(&app) {
+                    update(&app, |s| s.phase = Some(Phase::Ready));
+                    notify(&app, e, NotificationLevel::Error);
+                }
+            });
+            Ok(())
         }
         _ => Err("This action is not available right now.".into()),
     }
