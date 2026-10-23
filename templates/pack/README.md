@@ -70,6 +70,56 @@ different game version get a warning:
 "requires": { "game": ["…sha256sum of win64/game.exe…"] }
 ```
 
+## Signing your pack
+
+Signing lets players (and the launcher) tell that a pack and every update
+really come from you. Make a key once and keep it secret, like a password;
+put it in your CI's secrets if you build packs there:
+
+```sh
+sc-launch pack keygen my-server.key     # prints the public key and fingerprint
+```
+
+Sign the pack folder before zipping it, after every change:
+
+```sh
+sc-launch pack sign my-server --key my-server.key   # or STAR_FORGE_PACK_KEY=<key file text>
+```
+
+That writes `manifest.json` (every file with its size and SHA-256) and
+`manifest.sig`. When a player installs the pack, the launcher checks every
+file and remembers your key for this pack `id`. From then on it only accepts
+versions signed with the same key, and before each launch it checks the
+pack's code (`pack.json`, `patches/`) again. **If you lose the key, players
+have to remove the profile and install the pack again**, so back it up.
+
+A signed `pack.json` can't be changed by the launcher, so set
+`update.url` yourself when signing a pack you publish with updates.
+
+Publish your key's fingerprint on your website or Discord so players can
+compare it with the one the launcher shows. To have the launcher recognise
+your packs by name, open a pull request adding your key to `KNOWN` in
+`crates/sc-launch/src/trust.rs`.
+
+Check a pack the way the launcher will, without installing it:
+
+```sh
+sc-launch pack check my-server          # a folder, zip or published link
+```
+
+## Requiring an update
+
+When an update is needed to keep playing (new server data, changed patches),
+set `min_version` in the **published** `pack.json`:
+
+```json
+"update": { "url": "https://example.org/star-forge/pack.json", "min_version": "1.3.0" }
+```
+
+Before each launch the launcher asks that address; a player on an older
+version is told to update first. If your server can't be reached the game
+still starts, with a warning.
+
 ## Things to know
 
 - **`.pak` files win.** The game prefers a file inside a `.pak` archive over a
@@ -83,6 +133,10 @@ different game version get a warning:
 - **What a pack can contain.** Only `pack.json`, `resources/`, `files/`, `patches/` and
   top-level README/LICENSE/CHANGELOG files are installed; anything else in
   the zip (including dotfiles) is ignored.
+- **Each profile keeps its own game data.** The game's per-user folder (store
+  cache, player notes, logs, the local server's database) is separate for
+  every profile, so your server never sees another server's cached data.
+  Graphics settings and key bindings follow the player across profiles.
 - **Players are trusting you.** Overlays and patches change what the game
-  runs. Only publish packs from a source players can verify, such as your
-  own website or repository.
+  runs. Sign your pack, and publish it from a source players can verify,
+  such as your own website or repository.

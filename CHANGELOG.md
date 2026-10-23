@@ -10,6 +10,18 @@ to **Unreleased** as you go and rename it to the version when you tag
 - Settings: colour theme dropdown with swatches and a live preview on hover
 - Dialogs keep their title and close button in place while the content scrolls
 - Checkboxes are no longer cut off on Linux
+- Signed server packs: server teams sign packs with `sc-launch pack sign`;
+  the launcher checks every file, remembers the pack's key, refuses updates
+  signed by anyone else, and re-checks the pack's code before each launch.
+  The install review shows who signed a pack
+- `sc-launch pack check` shows what a pack would do and checks it against the
+  game without installing it; `sc-launch pack keygen` makes a signing key
+- Each profile keeps its own game data (store cache, notes, logs, local
+  server database), so servers no longer see each other's cached data.
+  Graphics settings and key bindings are still shared; turn it off per
+  profile in the profile dialog
+- Servers can require a minimum pack version (`update.min_version` in the
+  published `pack.json`); older versions must update before playing
 
 ## 0.2.1
 

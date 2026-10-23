@@ -185,7 +185,7 @@
       }
     },
     "update": {
-      "description": "Where the launcher checks for new versions: the URL of your published pack.json (the copy with download filled in). Packs installed from a published pack.json get this set automatically.",
+      "description": "Where the launcher checks for new versions: the URL of your published pack.json (the copy with download filled in). Unsigned packs installed from a published pack.json get this set automatically; signed packs must set it themselves.",
       "type": "object",
       "required": [
         "url"
@@ -196,6 +196,11 @@
           "type": "string",
           "format": "uri",
           "pattern": "^https://"
+        },
+        "min_version": {
+          "description": "In the published pack.json: the oldest pack version your server still accepts. The launcher won't start the game with anything older until the player updates.",
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([-+].*)?$"
         }
       }
     },

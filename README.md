@@ -148,6 +148,9 @@ sc-launch run <profile> [-- args]    # start the game with a profile
 sc-launch install <zip|folder|url>   # install or update a server pack
 sc-launch updates                    # check installed packs for new versions
 sc-launch update <profile>           # install the newest version of a profile's pack
+sc-launch pack check <pack>          # what a pack would do, checked like an install
+sc-launch pack keygen <key file>     # make a pack signing key (server teams)
+sc-launch pack sign <folder> --key <key file>   # sign a pack folder
 ```
 
 ### Repository layout
@@ -202,7 +205,15 @@ pair and its own `plugins.updater.endpoints`.
 - [ ] Settle on patch methods beyond `inject` if needed
 - [ ] Export a profile as a pack zip from the launcher
 - [ ] Profile editor for patches and extra arguments in the UI
-- [ ] Pack signing, so players can tell a pack really comes from its server
+- [x] Pack signing: ed25519-signed manifests, key pinned per pack id on first
+      install, pack code re-checked before every launch; `sc-launch pack
+      keygen|sign|check` for server teams
+- [x] Each profile keeps its own game data (store cache, notes, local server
+      database); graphics settings and key bindings stay shared
+- [x] Servers can require a minimum pack version before players launch
+- [ ] Known publishers: ship server teams' keys with the launcher
+- [ ] Shared core patch library that packs switch on by name
+- [ ] Downloads that only fetch the files an update changed
 
 **Launcher**
 - [x] STAR FORGE's own logo, icon and default theme (v1)
