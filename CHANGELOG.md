@@ -6,6 +6,8 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+## 0.2.3
+
 - Linux: Proton now always runs inside the Steam Linux Runtime its build asks
   for. A build without one, or a missing runtime, is refused with a message
   instead of running Proton directly on the system
