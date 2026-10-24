@@ -6,6 +6,15 @@ to **Unreleased** as you go and rename it to the version when you tag
 
 ## Unreleased
 
+- Linux: Proton now always runs inside the Steam Linux Runtime its build asks
+  for. A build without one, or a missing runtime, is refused with a message
+  instead of running Proton directly on the system
+- When the game isn't installed, was never started from Steam, or the runtime
+  is missing, the play button becomes **OPEN STEAM** and opens Steam to fix it
+  (install the game, start it once, or install the runtime), then **RETRY**
+- Notifications appear in the top right instead of over the page
+- `sc-launch info` shows which runtime container Proton runs in
+
 ## 0.2.2
 
 - New logo and emblem (SVG) and new app icons

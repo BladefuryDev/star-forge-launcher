@@ -1,5 +1,5 @@
 /** @typedef {'checking' | 'ready' | 'launching' | 'running' | 'failed'} LauncherPhase */
-/** @typedef {'retry' | 'launch'} LauncherAction */
+/** @typedef {'retry' | 'launch' | 'fix'} LauncherAction */
 /**
  * @typedef {{
  *   revision: number,
@@ -7,6 +7,7 @@
  *   primaryAction: LauncherAction | null,
  *   busy: boolean,
  *   blockingReason: string | null,
+ *   fixLabel: string | null,
  *   gameDirectory: string | null,
  *   proton: string | null,
  * }} LauncherSnapshot
@@ -40,6 +41,7 @@ function action(value) {
     case null:
     case 'retry':
     case 'launch':
+    case 'fix':
       return value;
     default:
       throw new Error('Invalid launcher snapshot: action');
@@ -72,6 +74,7 @@ export function parseSnapshot(input) {
     primaryAction: action(value.primaryAction),
     busy: value.busy,
     blockingReason: optionalText(value.blockingReason),
+    fixLabel: optionalText(value.fixLabel),
     gameDirectory: optionalText(value.gameDirectory),
     proton: optionalText(value.proton),
   });

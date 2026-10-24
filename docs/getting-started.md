@@ -13,8 +13,12 @@
    | Linux | `.AppImage` (any distro), `.deb` or `.rpm` |
 
 3. Start it. It finds the game in your Steam libraries and, on Linux, the
-   Proton build Steam last ran it with. If it can't, set the folder under
-   **Settings → Star Conflict**.
+   Proton build, Steam Linux Runtime and prefix Steam uses for it. If
+   something is missing (the game isn't installed, it was never started from
+   Steam, or the runtime isn't installed), the launcher says so and the play
+   button becomes **OPEN STEAM**, which opens Steam to fix it; press **RETRY**
+   afterwards. The game
+   folder can also be set under **Settings → Star Conflict**.
 
 The launcher updates itself: it checks at startup and offers to install a new
 version and restart (turn this off, or check by hand, under **Settings →
@@ -106,5 +110,9 @@ Common causes:
   changed keys, remove the profile and install the pack again.
 - **"Could not check … for updates"**: the server's site is unreachable, so
   you may be missing an update; the game still starts with what you have.
-- **No window on Linux**: start the game from Steam once, and check that the
-  Proton build in Settings exists.
+- **"…hasn't been started from Steam on this computer yet"** (Linux): press
+  **OPEN STEAM**, let the game reach its login screen, close it, and press
+  **RETRY**. That first Steam launch creates the game's prefix.
+- **"…needs the Steam Linux Runtime…"** or **"…doesn't run inside the Steam
+  Linux Runtime"** (Linux): install the runtime with **OPEN STEAM**, or choose a
+  current Proton for Star Conflict in Steam (Properties → Compatibility).

@@ -433,25 +433,25 @@ progress::-webkit-progress-value {
   height: 39px;
   border-radius: 11px;
 }
+/* Toasts stacked in the top right, below the window controls. */
 .notices {
   position: absolute;
-  top: 118px;
-  left: 40px;
-  right: 36px;
+  top: 48px;
+  right: 24px;
+  width: min(380px, calc(100% - 48px));
   z-index: 10;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 8px;
   pointer-events: none;
-  max-height: 125px;
+  max-height: calc(100% - 180px);
   overflow: auto;
 }
 .notice {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  max-width: 570px;
   padding: 12px 15px;
   background: #211e1af5;
   border: 1px solid #5c544b;
@@ -692,10 +692,6 @@ dialog footer {
   .launch-details {
     min-width: 150px;
   }
-  .notices {
-    left: 28px;
-    top: 144px;
-  }
   .primary-button {
     min-width: 130px;
   }
@@ -727,9 +723,6 @@ dialog footer {
   }
   .game-card-info {
     padding: 14px;
-  }
-  .notices {
-    max-height: 90px;
   }
 }
 @media (max-width: 900px) {

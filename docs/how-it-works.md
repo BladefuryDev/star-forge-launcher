@@ -20,12 +20,37 @@ Before a launch the launcher:
 4. checks the pack's patches against the installed `game.exe`;
 5. copies the player's graphics settings and key bindings into the profile.
 
-It then starts `sc-inject.exe`, through the same Proton build and prefix Steam
-uses on Linux, or directly on Windows. The injector writes the server address
+It then starts `sc-inject.exe`: directly on Windows, and on Linux through the
+same Proton, runtime and prefix Steam uses (below). The injector writes the server address
 to the profile's `files/data/address.cfg`, starts `game.exe` suspended, loads
 `sc_agent.dll` into it and resumes it. Everything the game starts (such as the
 built-in local server) runs in a job object and is stopped when the game
 exits. Afterwards the launcher copies changed settings back.
+
+## Linux: Proton inside the Steam Linux Runtime
+
+The launcher runs the game the way Steam does, with what Steam already set up:
+
+- **Prefix:** the game's own, `steamapps/compatdata/212070`. Steam creates it
+  on the first launch (and runs the game's first-time installers there); the
+  launcher never makes one itself.
+- **Proton:** the build Steam last ran the game with, from that prefix's
+  `config_info`, unless one is chosen in Settings.
+- **Runtime:** the Steam Linux Runtime that Proton build asks for in its
+  `toolmanifest.vdf` (`require_tool_appid`), found in the Steam libraries.
+
+The command is
+
+```
+SteamLinuxRuntime_4/run -- <proton>/proton waitforexitandrun sc-inject.exe --game … --profile … --dll …
+```
+
+with Steam's environment (`STEAM_COMPAT_DATA_PATH`, `SteamAppId`, …) and the
+game, prefix, profile and tools folders shared into the pressure-vessel
+container. Proton never runs outside the runtime: a build that names no
+runtime, or whose runtime isn't installed, is refused with a message saying
+what to do in Steam (and the play button opens Steam for it). `sc-launch info`
+shows the Proton, runtime and prefix in use.
 
 ## The agent
 

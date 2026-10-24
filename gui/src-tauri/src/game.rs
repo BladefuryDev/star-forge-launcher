@@ -28,6 +28,8 @@ pub struct Snapshot {
     primary_action: Option<&'static str>,
     busy: bool,
     blocking_reason: Option<String>,
+    /// Label of a button that fixes `blocking_reason` in Steam.
+    fix_label: Option<&'static str>,
     game_directory: Option<String>,
     proton: Option<String>,
 }
@@ -37,6 +39,9 @@ struct Inner {
     revision: u64,
     phase: Option<Phase>,
     reason: Option<String>,
+    fix: Option<launch::SteamFix>,
+    /// Steam was opened for `fix`; the play button is Retry again.
+    fix_opened: bool,
     setup: Option<launch::Setup>,
 }
 
@@ -46,7 +51,10 @@ pub struct GameState(Mutex<Inner>);
 fn snapshot_of(inner: &Inner) -> Snapshot {
     let phase = inner.phase.unwrap_or(Phase::Checking);
     #[cfg(unix)]
-    let proton = inner.setup.as_ref().map(|s| s.proton.dir.display().to_string());
+    let proton = inner.setup.as_ref().map(|s| {
+        let runtime = s.proton.runtime.parent().and_then(|d| d.file_name()).map(|n| n.to_string_lossy().into_owned());
+        format!("{} inside {}", s.proton.dir.display(), runtime.unwrap_or_else(|| "the Steam Linux Runtime".into()))
+    });
     #[cfg(not(unix))]
     let proton = None;
     Snapshot {
@@ -54,11 +62,13 @@ fn snapshot_of(inner: &Inner) -> Snapshot {
         phase,
         primary_action: match phase {
             Phase::Ready => Some("launch"),
+            Phase::Failed if inner.fix.is_some() && !inner.fix_opened => Some("fix"),
             Phase::Failed => Some("retry"),
             _ => None,
         },
         busy: matches!(phase, Phase::Checking | Phase::Launching),
         blocking_reason: inner.reason.clone(),
+        fix_label: inner.fix.map(launch::SteamFix::label),
         game_directory: inner.setup.as_ref().map(|s| s.game_dir.display().to_string()),
         proton,
     }
@@ -131,6 +141,8 @@ pub fn refresh(app: &AppHandle) {
     update(app, |s| {
         s.phase = Some(Phase::Checking);
         s.reason = None;
+        s.fix = None;
+        s.fix_opened = false;
     });
     let app = app.clone();
     std::thread::spawn(move || {
@@ -143,7 +155,8 @@ pub fn refresh(app: &AppHandle) {
             Err(e) => {
                 s.setup = None;
                 s.phase = Some(Phase::Failed);
-                s.reason = Some(e);
+                s.reason = Some(e.message);
+                s.fix = e.fix;
             }
         });
     });
@@ -263,6 +276,12 @@ pub fn initialize_launcher(app: AppHandle) {
 #[tauri::command]
 pub fn perform_launcher_action(app: AppHandle, action: String) -> Result<(), String> {
     match (action.as_str(), phase(&app)) {
+        ("fix", Phase::Failed) => {
+            let fix = app.state::<GameState>().0.lock().unwrap().fix.ok_or("Nothing to fix in Steam.")?;
+            crate::open_path(&app, std::ffi::OsStr::new(&fix.url()))?;
+            update(&app, |s| s.fix_opened = true);
+            Ok(())
+        }
         ("retry", Phase::Failed | Phase::Ready) => {
             refresh(&app);
             Ok(())

@@ -131,10 +131,7 @@ fn run() -> Result<u8, String> {
             {
                 let p = &setup.proton;
                 println!("proton:   {}", p.dir.display());
-                println!(
-                    "runtime:  {}",
-                    p.runtime.as_ref().map_or("none (running Proton directly)".into(), |r| r.display().to_string())
-                );
+                println!("runtime:  {} (Proton runs inside this container)", p.runtime.display());
                 println!("prefix:   {}", p.compat_data.display());
             }
             Ok(0)

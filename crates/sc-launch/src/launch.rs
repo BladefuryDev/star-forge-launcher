@@ -10,6 +10,73 @@ use std::process::Command;
 pub const INJECT_EXE: &str = "sc-inject.exe";
 pub const AGENT_DLL: &str = "sc_agent.dll";
 
+/// Something the player fixes in Steam, offered as a button next to the error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SteamFix {
+    /// Star Conflict isn't installed.
+    InstallGame,
+    /// Installed but never started from Steam on Linux, so there is no
+    /// Proton prefix or Proton choice yet.
+    StartOnce,
+    /// The Proton build needs a Steam Linux Runtime (this app id) that isn't installed.
+    InstallRuntime(u32),
+}
+
+impl SteamFix {
+    pub fn url(self) -> String {
+        match self {
+            SteamFix::InstallGame => format!("steam://install/{}", steam::GAME_APPID),
+            SteamFix::StartOnce => format!("steam://rungameid/{}", steam::GAME_APPID),
+            SteamFix::InstallRuntime(id) => format!("steam://install/{id}"),
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            SteamFix::InstallGame => "Install from Steam",
+            SteamFix::StartOnce => "Start once from Steam",
+            SteamFix::InstallRuntime(_) => "Install runtime from Steam",
+        }
+    }
+}
+
+/// Why the game can't be started yet, and what in Steam fixes it, if anything.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SetupError {
+    pub message: String,
+    pub fix: Option<SteamFix>,
+}
+
+impl SetupError {
+    pub fn new(message: impl Into<String>, fix: Option<SteamFix>) -> Self {
+        SetupError { message: message.into(), fix }
+    }
+}
+
+impl std::fmt::Display for SetupError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl From<String> for SetupError {
+    fn from(message: String) -> Self {
+        SetupError { message, fix: None }
+    }
+}
+
+impl From<&str> for SetupError {
+    fn from(message: &str) -> Self {
+        message.to_string().into()
+    }
+}
+
+impl From<SetupError> for String {
+    fn from(e: SetupError) -> Self {
+        e.message
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct Options {
     /// Game install folder (holding win64\ and data\). Found through Steam if unset.
@@ -43,21 +110,26 @@ fn library_of(game_dir: &Path) -> Option<PathBuf> {
 }
 
 /// The game install folder alone: `--game-dir`, `STAR_FORGE_GAME_DIR`, or Steam.
-pub fn find_game(opts: &Options) -> Result<PathBuf, String> {
+pub fn find_game(opts: &Options) -> Result<PathBuf, SetupError> {
     let explicit = opts.game_dir.clone().or_else(|| crate::env::path(crate::env::GAME_DIR));
     let game_dir = match explicit {
         Some(d) => d,
         None => steam::find_app(&steam::libraries(&steam::steam_roots()), steam::GAME_APPID)
             .map(|(_, dir)| dir)
-            .ok_or("Star Conflict was not found in any Steam library; pass --game-dir or set STAR_FORGE_GAME_DIR")?,
+            .ok_or_else(|| {
+                SetupError::new(
+                    "Star Conflict was not found in any Steam library. Install it from Steam (or set the game folder in Settings).",
+                    Some(SteamFix::InstallGame),
+                )
+            })?,
     };
     if !steam::is_game_dir(&game_dir) {
-        return Err(format!("{} does not look like a Star Conflict install", game_dir.display()));
+        return Err(format!("{} does not look like a Star Conflict install", game_dir.display()).into());
     }
     Ok(game_dir)
 }
 
-pub fn resolve(opts: &Options) -> Result<Setup, String> {
+pub fn resolve(opts: &Options) -> Result<Setup, SetupError> {
     let env = |explicit: &Option<PathBuf>, name| explicit.clone().or_else(|| crate::env::path(name));
     let opts = &Options {
         game_dir: env(&opts.game_dir, crate::env::GAME_DIR),
@@ -78,7 +150,7 @@ pub fn resolve(opts: &Options) -> Result<Setup, String> {
     };
     for f in [INJECT_EXE, AGENT_DLL] {
         if !tools_dir.join(f).is_file() {
-            return Err(format!("{f} is missing from {} (pass --tools-dir or set STAR_FORGE_TOOLS_DIR)", tools_dir.display()));
+            return Err(format!("{f} is missing from {} (pass --tools-dir or set STAR_FORGE_TOOLS_DIR)", tools_dir.display()).into());
         }
     }
 
@@ -158,32 +230,28 @@ pub fn command(setup: &Setup, profile_dir: &Path, game_args: &[String]) -> Resul
     let mut cmd = {
         let p = &setup.proton;
         let proton_script = p.dir.join("proton");
-        let mut c = match &p.runtime {
-            Some(run) => {
-                let mut c = Command::new(run);
-                c.arg("--").arg(&proton_script);
-                // pressure-vessel only shares a fixed set of host paths read-write.
-                let shared = [&p.compat_data, &setup.game_dir, &profile_dir, &setup.tools_dir];
-                let mut rw: Vec<String> = Vec::new();
-                for d in shared {
-                    let s = d.to_str().ok_or("path is not valid Unicode")?;
-                    if s.contains(':') {
-                        return Err(format!("{s}: paths shared with Proton cannot contain ':'"));
-                    }
-                    rw.push(s.to_string());
-                }
-                let mut value = std::env::var("PRESSURE_VESSEL_FILESYSTEMS_RW").unwrap_or_default();
-                for s in rw {
-                    if !value.is_empty() {
-                        value.push(':');
-                    }
-                    value.push_str(&s);
-                }
-                c.env("PRESSURE_VESSEL_FILESYSTEMS_RW", value);
-                c
+        // Proton always runs inside the Steam Linux Runtime it asks for, as
+        // under Steam; compat::detect refuses builds without one.
+        let mut c = Command::new(&p.runtime);
+        c.arg("--").arg(&proton_script);
+        // pressure-vessel only shares a fixed set of host paths read-write.
+        let shared = [&p.compat_data, &setup.game_dir, &profile_dir, &setup.tools_dir];
+        let mut rw: Vec<String> = Vec::new();
+        for d in shared {
+            let s = d.to_str().ok_or("path is not valid Unicode")?;
+            if s.contains(':') {
+                return Err(format!("{s}: paths shared with Proton cannot contain ':'"));
             }
-            None => Command::new(&proton_script),
-        };
+            rw.push(s.to_string());
+        }
+        let mut value = std::env::var("PRESSURE_VESSEL_FILESYSTEMS_RW").unwrap_or_default();
+        for s in rw {
+            if !value.is_empty() {
+                value.push(':');
+            }
+            value.push_str(&s);
+        }
+        c.env("PRESSURE_VESSEL_FILESYSTEMS_RW", value);
         c.arg("waitforexitandrun").arg(&inject).args(&args);
         c.env("STEAM_COMPAT_DATA_PATH", &p.compat_data)
             .env("STEAM_COMPAT_CLIENT_INSTALL_PATH", &p.steam_root)

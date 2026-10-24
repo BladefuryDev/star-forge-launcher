@@ -42,7 +42,8 @@ async function start() {
     const state = store.getSnapshot();
     if (!state) return;
     const button = control('play-button', HTMLButtonElement);
-    required('play-label').textContent = labels[state.phase];
+    // When Steam can fix what's wrong, the play button opens it (then becomes Retry).
+    required('play-label').textContent = state.primaryAction === 'fix' ? 'OPEN STEAM' : labels[state.phase];
     button.disabled =
       state.busy ||
       store.isRequestPending() ||
@@ -52,7 +53,11 @@ async function start() {
     status.textContent =
       state.phase === 'ready' && !profiles.ready()
         ? 'Choose or add a server profile'
-        : statuses[state.phase];
+        : state.phase === 'failed' && state.fixLabel
+          ? state.primaryAction === 'fix'
+            ? state.fixLabel
+            : 'Press Retry when Steam is done'
+          : statuses[state.phase];
     status.dataset.ready = String(state.phase === 'ready' && profiles.ready());
     if (state.blockingReason && state.blockingReason !== lastReason)
       notice(state.blockingReason, 'error');
